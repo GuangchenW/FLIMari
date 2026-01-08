@@ -1,6 +1,6 @@
 # Tutorials
 
-Two example FLIM images, along with a reference image for phasor calibration, are provided alongside FLIMari. The two examples provided are IMSPECTOR TIFF and PicoQuant PTU, but the following tutorials are agnostic to user image formats.
+Two example FLIM images, along with a reference image for phasor calibration, are provided alongside FLIMari. The images provided are IMSPECTOR TIFF and PicoQuant PTU, but the following tutorials are agnostic to user image formats.
 
 ## Import FLIM Data
 

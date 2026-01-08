@@ -2,10 +2,8 @@ site_name: FLIMari Docs
 nav:
   - Home: index.md
   - User Guide:
-    - User Guide: user-guide/index.md
     - Tutorials: user-guide/tutorials.md
-    - Programming Interface: user-guide/api.md
-    - Additonal Resources: user-guide/extra.md
+    - API Documentation: user-guide/api.md
   - About: about.md
 theme:
   name: material
