@@ -1,14 +1,30 @@
 site_name: FLIMari Docs
+
 nav:
   - Home: index.md
-  - User Guide:
-    - Tutorials: user-guide/tutorials.md
-    - API Documentation: user-guide/api.md
+  - User Guide: user-guide/tutorials.md
+  - API Reference: 
+    - flimari.core.napari: api/napari.md
+    - flimari.core.widgets: api/widgets.md
   - About: about.md
+
 theme:
   name: material
+
 markdown_extensions:
   - admonition
   - pymdownx.blocks.caption
   - toc:
       permalink: "#"
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: false
+            members_order: source
+            show_root_heading: true
+            show_root_full_path: false

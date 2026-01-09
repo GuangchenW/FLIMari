@@ -3,13 +3,11 @@ from qtpy.QtWidgets import QFrame
 
 class Indicator(QFrame):
 	"""
-	An indicator widget with OFF and named ON states.
-
-	- Pass 'states' as dict[str, str] mapping state name to hex color or CSS color.
-	  If omitted, defaults to green, yellow, and red.
-	- Call set_state("name") to turn ON with the corresponding color.
-	- Call set_off() to turn OFF (gray).
-	- Emits stateChanged(str) when state changes.
+	An indicator light widget with named states.
+	
+	Signals:
+    
+        - `stateChanged(str)`: Emitted when the state changes.
 	"""
 	stateChanged = Signal(str)
 
@@ -21,6 +19,14 @@ class Indicator(QFrame):
 		off_color: str = "#bdc3c7",
 		parent=None
 	):
+		"""
+		Args:
+			diameter: Size of the indicator.
+			states: State name to color hex string mappings. Default to 
+				`{ "ok": "#2ecc71", "warn": "#f1c40f", "bad": "#e74c3c" }`
+			off_color: Color for when the indicator is off.
+			parent: -
+		"""
 		super().__init__(parent)
 		self._diameter = diameter
 		self._off_color = off_color
@@ -39,12 +45,23 @@ class Indicator(QFrame):
 
 	## ------ Public API ------ ##
 	def set_off(self) -> None:
+		"""
+		Turn off the indicator.
+		"""
 		self._set_state("off")
 
 	def set_state(self, name:str) -> None:
+		"""
+		Args:
+			name: -
+		"""
 		self._set_state(name)
 
 	def state(self) -> str:
+		"""
+		Returns:
+			Current state.
+		"""
 		return self._state_name
 
 	## ------ Internal ------ ##

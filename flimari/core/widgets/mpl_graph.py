@@ -10,9 +10,22 @@ if TYPE_CHECKING:
 	from matplotlib.axes import Axes
 
 class MPLGraph(QWidget):
+	"""
+	A widget acting as container for a matplotlib figure canvas.
+
+	Signals:
+
+	- `canvasClicked(float, float)`: Emitted when the canvas is clicked at position (x,y). 
+	"""
 	canvasClicked = Signal(float, float)
 
 	def __init__(self, dpi:int = 120, fig_pixels:int = 480, parent:QWidget|None = None):
+		"""
+		Args:
+			dpi: -
+			fig_pixels: -
+			parent: -
+		"""
 		super().__init__(parent)
 		self.dpi = dpi
 		self.fig_pixels = fig_pixels
@@ -35,6 +48,10 @@ class MPLGraph(QWidget):
 
 	## ------ Public API ------ ##
 	def get_ax(self) -> "Axes":
+		"""
+		Returns:
+			Figure axes.
+		"""
 		return self._ax
 
 	def draw_idle(self) -> None:
@@ -42,6 +59,7 @@ class MPLGraph(QWidget):
 		self._canvas.draw_idle()
 
 	def clear(self) -> None:
+		"""Clear the axes and redraw."""
 		self._ax.cla()
 		self.draw_idle()
 

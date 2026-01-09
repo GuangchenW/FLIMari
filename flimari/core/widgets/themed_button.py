@@ -11,10 +11,18 @@ if TYPE_CHECKING:
 
 class ThemedButton(QPushButton):
 	"""
-	A QPushButton with napari built-in icons that follows viewer theme change.
-	See https://github.com/napari/napari/tree/main/src/napari/resources/icons for available icons.
+	A `QPushButton` with napari built-in icons that follows viewer theme change.
+
+	See [https://github.com/napari/napari/tree/main/src/napari/resources/icons](https://github.com/napari/napari/tree/main/src/napari/resources/icons) for available icons.
 	"""
 	def __init__(self, *args, icon:str, viewer:"napari.Viewer", **kwargs):
+		"""
+		Args:
+			*args: Arguments for `QPushButton`.
+			icon: Name of the napari icon.
+			viewer: Main viewer.
+			**kwargs: Additional arguments.
+		"""
 		super().__init__(*args, **kwargs)
 		self.viewer = viewer
 		self.icon = icon

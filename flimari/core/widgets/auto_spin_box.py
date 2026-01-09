@@ -18,17 +18,22 @@ COLOR_OVERRIDDEN = "#110044"
 
 class AutoDoubleSpinBox(QWidget):
 	"""
-	A labeled double spin box with:
-		- a cached value that can be set
-		- a Reset button that revertes the current value to the cached value
-		- color hints for state:
-			green  = cached value in use
-			red    = no value cached
-			blue   = value overridden by user
+	A labelled double spin box that can remember a value.
+	It has a **Reset** button that reverts the current value to the remembered value.
+
+	Color hints for state:
+
+	- Default (theme dependent): no value cached
+	- Green: cached value in use
+	- Blue: value overridden by user
 	"""
 	valueChanged = Signal(float)       # re-emits spinbox valueChanged
 
 	def __init__(self, parent:Optional[QWidget]=None) -> None:
+		"""
+		Args:
+			parent: -
+		"""
 		super().__init__(parent)
 
 		# Cached detected value (if any)
@@ -68,25 +73,51 @@ class AutoDoubleSpinBox(QWidget):
 
 	## ------ Public API ------ ##
 	def set_range(self, minimum:float, maximum:float) -> None:
+		"""
+		Args:
+			minimum: -
+			maximum: -
+		"""
 		self._spin.setRange(minimum, maximum)
 
 	def set_decimals(self, decimals:int) -> None:
+		"""Set the number of decimals.
+
+		Args:
+			decimals: -
+		"""
 		self._spin.setDecimals(decimals)
 
 	def set_step(self, step:float) -> None:
+		"""Set the step size.
+
+		Args:
+			step: -
+		"""
 		self._spin.setSingleStep(step)
 
 	def set_suffix(self, suffix: str) -> None:
+		"""Set the suffix/unit.
+
+		Args:
+			suffix: -
+		"""
 		self._spin.setSuffix(suffix)
 
 	def value(self) -> float:
+		"""
+		Returns:
+			The current value.
+		"""
 		return self._spin.value()
 
 	def set_value(self, value:float, as_default:bool=False) -> None:
 		"""
-		This always trigger value caching because there is no reason
-		to set value if some program update did not occur.
-		If as_default, current state will reset, treating value as the original.
+		Set the value and update the cache.
+
+		Args:
+			value: -
+			as_default: If `True`, initialize using `value`.
 		"""
 		# This is a little hacky but ok
 		self._spin.setValue(value)
@@ -104,7 +135,7 @@ class AutoDoubleSpinBox(QWidget):
 			self._apply_bg(COLOR_SUCCESS)
 
 	def reset_to_cached(self) -> None:
-		"""Reset to the cached detected value (if present)."""
+		"""Reset to the cached value (if available)."""
 		if not self._has_cached: return
 		self.set_value(self.cached_value)
 

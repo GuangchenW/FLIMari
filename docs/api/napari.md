@@ -1,0 +1,1 @@
+:::flimari.core.napari.LayerManager
