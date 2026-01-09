@@ -16,6 +16,6 @@ It provides an interactive, phasor-based lifetime visualization and analysis pip
 ### 🔧 Installation
 Follow the tutorial from napari to set up the python environment, then run the following:
 ```bash
-pip install "git+https://github.com/GuangchenW/FLIMStudio.git"
+pip install "git+https://github.com/GuangchenW/FLIMari.git"
 ```
 Then launch napari and enable the FLIM Studio plugin.
