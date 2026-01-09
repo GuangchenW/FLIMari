@@ -13,7 +13,7 @@ FLIMari is an open-source [Napari](https://napari.org) plugin for machine learni
 
 Follow the [napari tutorial](https://napari.org/dev/tutorials/fundamentals/installation.html) to set up the python environment, then run the following command in the same environment:
 
-`pip install "git+https://github.com/GuangchenW/FLIMStudio.git"`
+`pip install "git+https://github.com/GuangchenW/FLIMari.git"`
 
 ## Quickstart
 
