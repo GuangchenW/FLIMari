@@ -39,7 +39,7 @@ Datasets can be freely selected and deselected using `SHIFT+LEFT MOUSE CLICK` an
 
 Datasets can be assigned to groups. Usually this helps with organizing FLIM data obtained under the same experimental condition. To change the group of selected datasets, enter the group name in the text box, then press **Group selected**. You should see the group name changes in the list item UI.
 
-![Group datasets](../img/default.jpg)
+![Group datasets](../img/group_selected.png)
 /// caption
 Enter group name in the text box, then press **Group selected** to change the group assignments of selected datasets.
 ///
@@ -77,7 +77,7 @@ To calibrate datasets, simply select them in the [dataset list](tutorials.md#man
 
 ![Calibrate Phasor](../img/calibrate_phasor.png)
 /// caption
-Calibrate datasets
+Calibrated datasets. Note the green indicators.
 ///
 
 !!!warning
@@ -92,7 +92,7 @@ FLIM data often contains background pixels and pixels with low total photon coun
 
 FLIMari offers two simple but effective filters: photon thresholding and the median filter. These two filters are applied sequentially, with the median filter being applied first and photon thresholding last.
 
-![Filter control](../img/default.jpg)
+![Filter control](../img/filters.png)
 /// caption
 Input fields for filter adjustments
 ///
@@ -117,7 +117,7 @@ Filters are only applied/updated when the **Apply filter** button is pressed, an
 
 To visualize phasor coordinates of datasets, press the **Visualize Phasor** button to open the **Phasor Plot** widget.
 
-![Phasor Plot widget](../img/default.jpg)
+![Phasor Plot widget](../img/phasor_plot.png)
 /// caption
 The Phasor Plot widget
 ///
@@ -132,21 +132,6 @@ In particular, `contour` and `scatter` plots can color phasor points using diffe
 !!!tip
     Applying filters to datasets also updates them in the **Phasor Plot** widget. Use the *Draw* button to refresh the canvas.
 
-![Contour phasor plot](../img/default.jpg)
-/// caption
-Contour phasor plot using the "jet" color gradient
-///
-
-![Scatter phasor plot](../img/default.jpg)
-/// caption
-Scatter phasor plot colored by groups
-///
-
-![Histogram phasor plot](../img/default.jpg)
-/// caption
-Histogram phasor plot of a single dataset
-///
-
 !!!warning
     It is not recommended to plot multiple datasets together using the `hist` style (histogram plot). Doing so will result in datasets overwriting the histogram bins of each other. FLIMari is planning for a better implementation of histogram phasor plots in future versions.
 
@@ -158,14 +143,12 @@ FLIMari supports region-of-interest (ROI) analysis directly in phasor space. Thi
 
 To create a new ROI, enter a descriptive name in the text box on the right side of the **Phasor Plot** widget and press the **Add ROI** button. A circular ROI cursor will appear on the phasor plot canvas, and a corresponding control entry will be added to the ROI list.
 
-![Adding ROI to phasor graph](../img/default.jpg)
+![Adding ROI to phasor graph](../img/roi.png)
 /// caption
-ROI cursor and controls in the Phasor Plot widget
+ROI cursors on the Phasor Plot
 ///
 
 ### ROI Controls
-
-![ROI Entry](../img/default.jpg)
 
 Each ROI entry in the list provides the following controls:
 
@@ -201,7 +184,7 @@ This is useful for:
 
 To access the **UMAP Analysis** widget, select all or some datasets, then press the **UMAP Analysis** button below the dataset list.
 
-![UMAP Analysis Widget](../img/default.jpg)
+![UMAP Analysis Widget](../img/umap_overview.png)
 /// caption
 Overview of the **UMAP Analysis** widget
 ///
@@ -259,7 +242,7 @@ Selecting more stats results in a richer description of each dataset, but can al
 The **Datasets** list controls which datasets are included in the analysis. Like lists in other widgets, multi-select is supported. By deafault, all datasets are selected.
 
 !!!warning
-   If you select too few image features, feature stats, or select too few datasets, UMAP and preprocessing may fail due to not enough rows/columns in the feature matrix.
+    If you select too few image features, feature stats, or select too few datasets, UMAP and preprocessing may fail due to not enough rows/columns in the feature matrix.
 
 ### Preprocessing
 
@@ -299,7 +282,7 @@ If you are unsure, keep the default parameters.
 
 Press **Run UMAP** to generate the 2D plot. Each point on the plot corresponds to one selected dataset. If any datasets are unusable for the chosen feature set (e.g. no valid pixels), they will be removed.
 
-![UMAP Plot](../img/default.jpg)
+![UMAP Plot](../img/umap.png)
 /// caption
 Example UMAP plot
 ///
