@@ -54,4 +54,4 @@ include-package-data = true
 include = ["flimari*"]
 
 [tool.setuptools.package-data]
-flim_studio = ["napari.yaml", "**/*.yaml", "**/*.yml"]
+flimari = ["napari.yaml", "**/*.yaml", "**/*.yml"]
