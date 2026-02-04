@@ -75,11 +75,7 @@ class DatasetRow(QWidget):
 			"Select lifetime estimations.\n'non': original signal\n'phi': apparent phase lifetime\n"
 			"'M': apparent modulation lifetime\nproj: projected lifetime\navg: average geometric-search lifetime"
 		))
-		self.lifetime_combo_box.addItem("none")
-		self.lifetime_combo_box.addItem("phi")
-		self.lifetime_combo_box.addItem("M")
-		self.lifetime_combo_box.addItem("proj")
-		self.lifetime_combo_box.addItem("avg")
+		self.lifetime_combo_box.addItems(["none", "phi", "M", "proj", "avg"])
 		self.lifetime_combo_box.currentIndexChanged.connect(lambda i : self._on_show())
 		# Indicator for calibration status
 		self.indicator = Indicator()
@@ -194,9 +190,18 @@ class SampleManagerWidget(QWidget):
 		dataset_control_layout.addWidget(self.le_group, 1, 0)
 		dataset_control_layout.addWidget(self.btn_assign_group, 1, 1)
 		# Calibration
+		self.calibration_mode = QComboBox()
+		self.calibration_mode.addItem("Mapping")
+		self.calibration_mode.addItem("IRF")
+		self.calibration_mode.setToolTip(
+			"Select phasor calibration method.\n"
+			"'Mapping': Transform phasors using a sample with a known mono-exponential lifetime.\n"
+			"'IRF': Deconvolution using the Instrument Response Function/SHG."
+		)
 		self.btn_calibrate = QPushButton("Calibrate selected")
 		self.btn_calibrate.clicked.connect(self._on_calibrate_selected)
-		dataset_control_layout.addWidget(self.btn_calibrate, 1, 2, 1, 2)
+		dataset_control_layout.addWidget(self.calibration_mode, 1, 2)
+		dataset_control_layout.addWidget(self.btn_calibrate, 1, 3)
 
 		# Filter control
 		# Second row: photon count thresholding
