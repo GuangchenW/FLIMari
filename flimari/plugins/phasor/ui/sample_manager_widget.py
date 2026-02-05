@@ -174,7 +174,7 @@ class SampleManagerWidget(QWidget):
 		self.le_channel = QLabel()
 		self.le_channel.setText("Channel:")
 		self.channel_selector = QSpinBox()
-		self.channel_selector.setRange(0, 99)
+		self.channel_selector.setRange(1, 99)
 		self.btn_browse_file = QPushButton("Browse file...")
 		self.btn_browse_file.clicked.connect(self._on_browse_file)
 		dataset_control_layout.addWidget(self.le_channel, 0, 0)
@@ -296,7 +296,7 @@ class SampleManagerWidget(QWidget):
 			"",
 			"FLIM files (*.tif *.tiff *.ptu);;All files (*)"
 		)
-		selected_channel = self.channel_selector.value()
+		selected_channel = self.channel_selector.value()-1
 		for path in paths:
 			ds = Dataset(path=path, channel=selected_channel)
 

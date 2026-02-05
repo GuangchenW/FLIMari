@@ -15,7 +15,7 @@ Files are selected through the native OS file manager dialog. Multiple files wit
 
 !!!note
     Only one channel is loaded at once for all selected files. If you want to analyze multiple channels in the same FLIM file, you can load the file multiple times, each time with a different channel specified.<p>
-    FLIMari channels are zero-based, meaning channel 0 is the first channel. 
+    FLIMari channels are one-based, meaning channel 1 is the first channel. 
 
 ## Manage FLIM Data
 
