@@ -201,7 +201,7 @@ class Dataset:
 		raise KeyError(stat)
 
 	def display_name(self) -> str:
-		return f"{self.name} (C{self.channel}) [{self.group}]"
+		return f"{self.name} (C{self.channel+1}) [{self.group}]"
 
 	## ------ Internal ------ ##
 	def _photon_sum(self) -> np.ndarray:
