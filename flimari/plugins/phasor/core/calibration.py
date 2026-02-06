@@ -23,7 +23,7 @@ class Calibration:
 		self.phase_zero: float = 0.0 # phi calibration
 		self.modulation_zero: float = 1.0 # m calibration
 
-		self.mode: Literal["Mapping", "IRF"] = "Mapping" # Method of calibration
+		self.mode: str = MODE_MAPPING # Method of calibration
 
 	def load(self, path:str|Path, channel:int=0) -> None:
 		"""
@@ -61,10 +61,10 @@ class Calibration:
 		Transform the given phasor coordinates using self.phase_zero and self.modulation_zero.
 		Returns the transformed real and imaginary components.
 		"""
-		if self.mode == "Mapping":
+		if self.mode == MODE_MAPPING:
 			# We need to add empty axis so the phase and modulation harmonics can be broadcasted correctly.
 			return phasor_transform(real, imag, self.phase_zero[:,None,None], self.modulation_zero[:,None,None])
-		elif self.mode == "IRF":
+		elif self.mode == MODE_IRF:
 			# Deconvolution through complex division
 			return phasor_divide(real, imag, self.ref_real, self.ref_imag)
 		else:
