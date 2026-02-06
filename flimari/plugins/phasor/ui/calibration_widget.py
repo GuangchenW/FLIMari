@@ -132,7 +132,8 @@ class CalibrationWidget(QGroupBox):
 		try:
 			channel = self.channel_selector.value()-1
 			self.calibration.load(path, channel)
-			self.calibration.mode = self.mode_selector.currentText
+			# IMPORTANT: Ensure newly loaded calibration has the right mode
+			self.calibration.mode = self.mode_selector.currentText()
 		except Exception as e:
 			self.le_ref_status.setText(f"Error: {type(e).__name__}")
 			return

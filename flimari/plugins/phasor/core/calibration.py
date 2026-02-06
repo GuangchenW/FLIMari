@@ -6,10 +6,6 @@ from phasorpy.lifetime import phasor_from_lifetime, polar_from_reference_phasor
 from flimari.core.io import load_signal
 
 class Calibration:
-
-	MODE_MAPPING = "Reference phasor"
-	MODE_IRF = "IRF"
-
 	def __init__(self) -> None:
 		self.path: str|Path = "" # Path to reference
 		self.signal = None # Reference signal
@@ -23,7 +19,9 @@ class Calibration:
 		self.phase_zero: float = 0.0 # phi calibration
 		self.modulation_zero: float = 1.0 # m calibration
 
-		self.mode: str = MODE_MAPPING # Method of calibration
+		self.MODE_MAPPING = "Reference phasor"
+		self.MODE_IRF = "IRF"
+		self.mode: str = self.MODE_MAPPING # Method of calibration
 
 	def load(self, path:str|Path, channel:int=0) -> None:
 		"""
@@ -61,10 +59,10 @@ class Calibration:
 		Transform the given phasor coordinates using self.phase_zero and self.modulation_zero.
 		Returns the transformed real and imaginary components.
 		"""
-		if self.mode == MODE_MAPPING:
+		if self.mode == self.MODE_MAPPING:
 			# We need to add empty axis so the phase and modulation harmonics can be broadcasted correctly.
 			return phasor_transform(real, imag, self.phase_zero[:,None,None], self.modulation_zero[:,None,None])
-		elif self.mode == MODE_IRF:
+		elif self.mode == self.MODE_IRF:
 			# Deconvolution through complex division
 			return phasor_divide(real, imag, self.ref_real, self.ref_imag)
 		else:

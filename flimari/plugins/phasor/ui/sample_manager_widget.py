@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Dict, Optional, List, TYPE_CHECKING
 
 import numpy as np
+from napari.utils import progress
 
 from qtpy.QtCore import Qt, Signal
 from qtpy.QtGui import QIcon
@@ -190,18 +191,9 @@ class SampleManagerWidget(QWidget):
 		dataset_control_layout.addWidget(self.le_group, 1, 0)
 		dataset_control_layout.addWidget(self.btn_assign_group, 1, 1)
 		# Calibration
-		self.calibration_mode = QComboBox()
-		self.calibration_mode.addItem("Mapping")
-		self.calibration_mode.addItem("IRF")
-		self.calibration_mode.setToolTip(
-			"Select phasor calibration method.\n"
-			"'Mapping': Transform phasors using a sample with a known mono-exponential lifetime.\n"
-			"'IRF': Deconvolution using the Instrument Response Function/SHG."
-		)
 		self.btn_calibrate = QPushButton("Calibrate selected")
 		self.btn_calibrate.clicked.connect(self._on_calibrate_selected)
-		dataset_control_layout.addWidget(self.calibration_mode, 1, 2)
-		dataset_control_layout.addWidget(self.btn_calibrate, 1, 3)
+		dataset_control_layout.addWidget(self.btn_calibrate, 1, 2, 1, 2)
 
 		# Filter control
 		# Second row: photon count thresholding
@@ -297,7 +289,7 @@ class SampleManagerWidget(QWidget):
 			"FLIM files (*.tif *.tiff *.ptu);;All files (*)"
 		)
 		selected_channel = self.channel_selector.value()-1
-		for path in paths:
+		for path in progress(paths, desc="Reading files"):
 			ds = Dataset(path=path, channel=selected_channel)
 
 			item = QListWidgetItem(self.dataset_list)
@@ -330,7 +322,7 @@ class SampleManagerWidget(QWidget):
 		Get the DatasetRow widget in the list items and make them compute phasor given the calibration.
 		"""
 		rows = self.get_selected_rows()
-		for r in rows:
+		for r in progress(rows, desc="Calibrating phasors"):
 			r.calibrate_phasor(self.calibration)
 
 	def _on_btn_assign_group_clicked(self) -> None:
@@ -349,7 +341,7 @@ class SampleManagerWidget(QWidget):
 	def _on_btn_apply_filter_clicked(self) -> None:
 		dataset_rows = self.get_selected_rows()
 		param_vals = self._get_filter_param_values()
-		for row in dataset_rows:
+		for row in progress(dataset_rows, desc="Applying filters"):
 			ds = row.dataset
 			for name in self.param_names:
 				# Only set if the value is not None, i.e. the spinbox is not special text
