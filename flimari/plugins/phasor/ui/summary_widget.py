@@ -1,9 +1,12 @@
+import re
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
+from napari.utils.notifications import show_info, show_warning, show_error
 
 from qtpy.QtWidgets import (
 	QWidget,
@@ -16,6 +19,7 @@ from qtpy.QtWidgets import (
 	QLabel,
 	QListWidget,
 	QListWidgetItem,
+	QFileDialog
 )
 
 from flimari.core.widgets import MPLGraph
@@ -36,6 +40,7 @@ class SummaryWidget(QWidget):
 			"phi_lifetime",
 			"m_lifetime",
 			"proj_lifetime",
+			"avg_lifetime"
 		]
 		self._build()
 
@@ -118,8 +123,65 @@ class SummaryWidget(QWidget):
 		return f"{dataset.name} (channel {dataset.channel}) [{dataset.group}]"
 
 	def _on_btn_export_clicked(self) -> None:
-		pass
-		# TODO: Implement data export
+		datasets = self.get_selected_datasets()
+		if len(datasets) == 0: return
+
+		# Ask for output folder
+		out_dir = QFileDialog.getExistingDirectory(
+			self,
+			"Select export folder",
+			"",
+			QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
+		)
+		if not out_dir: return
+		out_dir_path = Path(out_dir)
+
+		def _safe_filename(name: str) -> str:
+			# Replace characters that are illegal or annoying in filenames
+			s = re.sub(r"[^\w\s\.-]", "_", name, flags=re.UNICODE)
+			s = re.sub(r"\s+", " ", s).strip()
+			return s if s else "dataset"
+
+		exported = []
+		failed = []
+
+		for ds in datasets:
+			try:
+				summary = ds.summarize()
+				# Convert to dictionary
+				data = {stat: summary[stat] for stat in self.stats_items}
+				df = pd.DataFrame(data)
+
+				base = _safe_filename(ds.display_name())
+				out_path = out_dir_path / f"{base}.csv"
+
+				# Resolving naming conflicts
+				if out_path.exists():
+					i = 2
+					while True:
+						candidate = out_dir_path / f"{base} ({i}).csv"
+						if not candidate.exists():
+							out_path = candidate
+							break
+						i += 1
+
+				df.to_csv(out_path, index=False)
+				exported.append(str(out_path))
+
+			except Exception as e:
+				failed.append(f"{getattr(ds, 'name', 'dataset')}: {e}")
+
+		if len(exported) == 0:
+			show_error("Export failed for all selected datasets:\n" + "\n".join(failed))
+			return
+
+		if failed:
+			show_warning(
+				f"Exported {exported} dataset(s), but some failed:\n" + "\n".join(failed)
+			)
+			return
+
+		show_info(f"Exported {exported} dataset(s) to:\n{out_dir}")
 
 	def _on_selection_changed(self) -> None:
 		"""

@@ -142,10 +142,11 @@ class Dataset:
 		out["name"] = self.name
 		out["channel"] = self.channel
 		out["group"] = self.group
-		out["photon_count"] = self.counts.flatten()
-		out["phi_lifetime"] = self.phase_lifetime.flatten()
-		out["m_lifetime"] = self.modulation_lifetime.flatten()
-		out["proj_lifetime"] = self.normal_lifetime.flatten()
+		out["photon_count"] = self.counts[self.mask]
+		out["phi_lifetime"] = self.phase_lifetime[self.mask]
+		out["m_lifetime"] = self.modulation_lifetime[self.mask]
+		out["proj_lifetime"] = self.normal_lifetime[self.mask]
+		out["avg_lifetime"] = self.avg_lifetime[self.mask]
 		return out
 
 	def pixel_values(self, metric:str, harmonic:int=1) -> np.ndarray:
