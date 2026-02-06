@@ -101,7 +101,7 @@ class PhasorGraphWidget(MPLGraph):
 				Patch(facecolor=color, edgecolor='none', label=group)
 				for group, color in legend.items()
 			]
-			self._ax.legend(handles=handles, title="Group", fontsize="small", title_fontsize="small")
+			self._ax.legend(handles=handles, title="Group", fontsize="small", title_fontsize="small", loc="upper right")
 
 		self.draw_idle()
 
@@ -129,7 +129,8 @@ class PhasorGraphWidget(MPLGraph):
 				self._pp.hist2d(g, s, cmap=cmap)
 			case "contour":
 				if cmap is None:
-					self._pp.contour(g, s, colors=dataset.color)
+					# HACK: hide lowest level by forcing line width 0
+					self._pp.contour(g, s, colors=dataset.color, linewidths=[0,1,1,1,1,1,1])
 				else:
 					self._pp.contour(g, s, cmap=cmap)
 
