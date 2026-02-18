@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 	import xarray
 
 class Dataset:
-	__slots__ = ("path", "name", "channel", "signal", "frequency", "counts", "counts_filtered",
+	__slots__ = ("path", "name", "channel", "frequency", "counts", "counts_filtered",
 		"mean", "real_raw", "imag_raw", "real_calibrated", "imag_calibrated", "g", "s",
 		"phase_lifetime", "modulation_lifetime", "normal_lifetime", "geo_lifetime", "geo_fraction", "avg_lifetime",
 		"max_count", "min_count", "kernel_size", "repetition", "mask", "group", "color")
@@ -31,15 +31,15 @@ class Dataset:
 		self.path: str|Path = path
 		self.name: str = os.path.basename(path)
 		self.channel: int = channel
-		self.signal: "xarray.DataArray" = load_signal(path, channel)
+		signal = load_signal(path, channel)
 
 		# Derived attributes
-		self.counts: np.ndarray = self._photon_sum() # Sum of photon counts over H axis
+		self.counts: np.ndarray = signal.sum(dim='H').to_numpy() # Sum of photon counts over H axis
 		self.counts_filtered: np.ndarray = self.counts.copy() # Photon counts but filtered with threshold
 		# Raw immutable phasor attributes
-		self.mean, self.real_raw, self.imag_raw = phasor_from_signal(self.signal, axis='H', harmonic=[1,2])
+		self.mean, self.real_raw, self.imag_raw = phasor_from_signal(signal, axis='H', harmonic=[1,2])
 		# Last seen frequency (MHz)
-		self.frequency: float = self.signal.attrs.get("frequency", 80)
+		self.frequency: float = signal.attrs.get("frequency", 80)
 		self.frequency = self.frequency if self.frequency > 0 else 80
 		# Calibrated phasors
 		self.real_calibrated: np.ndarray = self.real_raw.copy()
@@ -205,10 +205,6 @@ class Dataset:
 		return f"{self.name} (C{self.channel+1}) [{self.group}]"
 
 	## ------ Internal ------ ##
-	def _photon_sum(self) -> np.ndarray:
-		# Sum raw signal over time-axis => photon counts per pixel.
-		return self.signal.sum(dim='H').to_numpy()
-
 	def _photon_range_mask(self) -> np.ndarray:
 		"""
 		Return a labels mask (Y,X) with values: 0=low, 1=kept, 2=high.
