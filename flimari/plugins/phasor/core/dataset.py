@@ -175,7 +175,7 @@ class Dataset:
 			case "geo_frac1":
 				vals =	self.geo_fraction[0].ravel()
 			case "geo_frac2":
-				vals = ds.geo_fraction[1].ravel()
+				vals = self.geo_fraction[1].ravel()
 			case _:
 				raise KeyError(metric)
 
