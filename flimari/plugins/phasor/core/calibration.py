@@ -15,7 +15,7 @@ class Calibration:
 
 		# Laser frequency of used for calibration
 		# (not necessarily from metadata, may be set by user)
-		self.frequency: float = 0.0
+		self.frequency: float = 80.0 # Default 80 mhz
 		self.phase_zero: float = 0.0 # phi calibration
 		self.modulation_zero: float = 1.0 # m calibration
 
@@ -29,6 +29,7 @@ class Calibration:
 		"""
 		self.signal = load_signal(path, channel)
 		self.path = path
+		self.frequency = self.get_signal_attribute("frequency")
 
 		# Compute phasor coordinates
 		self.ref_mean, self.ref_real, self.ref_imag = phasor_from_signal(self.signal, axis='H', harmonic=[1,2])
