@@ -324,13 +324,18 @@ class UMAPWidget(QWidget):
 		feature_names = []
 		rows = []
 
+		# Feature matrix, each row is a dataset
 		for ds in datasets:
 			feats = []
 			for m in metrics:
 				for s in stats:
 					feats.append(ds.image_feature(m, s, harmonic=harmonic))
-					feature_names.append(f"{m}:{s}")
 			rows.append(feats)
+
+		# Unique feature name, shared by datasets
+		for m in metrics:
+			for s in stats:
+				feature_names.append(f"{m}:{s}")
 
 		X = np.asarray(rows, dtype=float)
 		return X, feature_names
@@ -544,6 +549,8 @@ class UMAPWidget(QWidget):
 		)
 		if not path: return
 
+		print("Exported features: ", self._feature_names)
+
 		try:
 			rows = []
 			for i, ds in enumerate(self._used_datasets):
@@ -558,7 +565,7 @@ class UMAPWidget(QWidget):
 					row["kmeans"] = int(self._kmeans_labels[i])
 				if self._dbscan_labels is not None:
 					row["dbscan"] = int(self._dbscan_labels[i])
-				# Add features too (handy for debugging)
+				# Add features too
 				for j, fn in enumerate(self._feature_names):
 					row[fn] = float(self._feature_matrix[i, j])
 				rows.append(row)

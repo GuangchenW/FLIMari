@@ -77,7 +77,7 @@ class PhasorControlPanel(QGroupBox):
 		self.dataset_list.setSelectionMode(self.dataset_list.ExtendedSelection)
 		self.dataset_list.setSpacing(0)
 		for ds in self._datasets:
-			list_item = QListWidgetItem(f"{ds.name} (channel {ds.channel})")
+			list_item = QListWidgetItem(ds.display_name())
 			self.dataset_list.addItem(list_item)
 			# We want all datasets to be selected at the start
 			# because we will immediately plot them
