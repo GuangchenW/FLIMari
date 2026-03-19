@@ -52,7 +52,7 @@ class UMAPWidget(QWidget):
 		# Cached results for recoloring and export
 		self._embedding: np.ndarray | None = None           # (n, 2)
 		self._used_datasets: list["Dataset"] = []           # aligned to embedding rows
-		self._feature_names: list[str] = []
+		self._feature_names: list[str] = []                 # This is feature+stats name
 		self._feature_matrix: np.ndarray | None = None      # (n, d)
 
 		self._kmeans_labels: np.ndarray | None = None       # (n,)
@@ -448,9 +448,9 @@ class UMAPWidget(QWidget):
 			return
 
 		datasets = self.get_selected_datasets()
-		if len(datasets) < 3:
-			QMessageBox.warning(self, "Not enough datasets", "Select at least 3 datasets for UMAP.")
-			return
+		#if len(datasets) < 3:
+		#	QMessageBox.warning(self, "Not enough datasets", "Select at least 3 datasets for UMAP.")
+		#	return
 
 		metrics = self._selected_metrics()
 		stats = self._selected_stats()
@@ -463,6 +463,7 @@ class UMAPWidget(QWidget):
 		try:
 			X, feature_names = self._build_feature_matrix(datasets, metrics, stats, harmonic=harmonic)
 
+			# TODO: Need to change this to accommodate rois
 			# Drop datasets with any NaN feature (e.g. empty mask)
 			good = np.isfinite(X).all(axis=1)
 			if not np.all(good):
@@ -476,9 +477,9 @@ class UMAPWidget(QWidget):
 				datasets = [datasets[i] for i in range(len(datasets)) if good[i]]
 				X = X[good]
 
-			if len(datasets) < 3:
-				QMessageBox.warning(self, "Not enough valid datasets", "Too few valid datasets after filtering.")
-				return
+			#if len(datasets) < 3:
+			#	QMessageBox.warning(self, "Not enough valid datasets", "Too few valid datasets after filtering.")
+			#	return
 
 			Xp = self._preprocess(X)
 			emb = self._run_umap(Xp)
@@ -492,7 +493,7 @@ class UMAPWidget(QWidget):
 			self._kmeans_labels = None
 			self._dbscan_labels = None
 
-			self._set_status(f"UMAP done. n={len(datasets)}, d={X.shape[1]}")
+			self._set_status(f"UMAP done. n={X.shape[0]}, d={X.shape[1]}")
 			self._redraw()
 
 		except Exception as e:

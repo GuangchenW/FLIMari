@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Dict, Optional, List, TYPE_CHECKING
 
 import numpy as np
+import tifffile as t3f
 from napari.utils import progress
 
 from qtpy.QtCore import Qt, Signal
@@ -66,7 +67,11 @@ class DatasetRow(QWidget):
 		self.btn_delete = ThemedButton(icon="delete", viewer=self.viewer)
 		self.btn_delete.setToolTip("Remove dataset")
 		self.btn_delete.clicked.connect(self._on_removal)
-		# TODO: Change behavior of eye button
+		# Button for import external labels
+		self.btn_import_labels = ThemedButton(icon="new_labels", viewer=self.viewer)
+		self.btn_import_labels.setToolTip("Import labels")
+		self.btn_import_labels.clicked.connect(self._on_import_labels)
+		# Button for focus on layers related to dataset
 		self.btn_show = ThemedButton(icon="visibility", viewer=self.viewer)
 		self.btn_show.setToolTip("Focus in layer viewer")
 		self.btn_show.clicked.connect(lambda : LayerManager().focus_on_layers(self.dataset.name))
@@ -85,6 +90,7 @@ class DatasetRow(QWidget):
 		# put label in the middle to prevent missclick of buttons
 		layout.addWidget(self.btn_delete, 0)
 		layout.addWidget(self.label, 1)
+		layout.addWidget(self.btn_import_labels, 0)
 		layout.addWidget(self.lifetime_combo_box, 0)
 		layout.addWidget(self.btn_show, 0)
 		layout.addWidget(self.indicator, 0)
@@ -125,8 +131,6 @@ class DatasetRow(QWidget):
 		# TODO: Remove the associated layers?
 
 	def _on_show(self) -> None:
-		if self.dataset is None:
-			raise RuntimeError(f"Sample {self.name} does not have a dataset")
 		# Show lifetime map
 		match self.lifetime_combo_box.currentText():
 			case "none":
@@ -139,6 +143,20 @@ class DatasetRow(QWidget):
 				LayerManager().add_image(self.dataset.normal_lifetime, name=self.dataset.name, overwrite=True)
 			case "avg":
 				LayerManager().add_image(self.dataset.avg_lifetime, name=self.dataset.name, overwrite=True)
+
+	def _on_import_labels(self) -> None:
+		path, _ = QFileDialog.getOpenFileName(self, "Select label file", "", "TIFF files (*.tif *.tiff)")
+		labels = t3f.imread(path)
+		if len(labels.shape) > 2:
+			raise RuntimeError("Incorrect label format, must have only 1 channel")
+		self.dataset.set_labels(labels)
+		LayerManager().add_label(
+			labels,
+			name=self.dataset.name,
+			display_name = self.dataset.name+".roi",
+			overwrite=True
+		)
+
 
 class SampleManagerWidget(QWidget):
 	def __init__(
