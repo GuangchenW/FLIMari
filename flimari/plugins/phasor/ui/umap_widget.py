@@ -27,11 +27,7 @@ from flimari.core.widgets import MPLGraph
 from flimari.plugins.phasor.core import FeatureNames, StatsNames, Dataset
 
 import pandas as pd
-
-try:
-	import umap  # umap-learn
-except Exception:  # pragma: no cover
-	umap = None
+import umap
 
 try:
 	from sklearn.preprocessing import StandardScaler, RobustScaler
@@ -449,9 +445,6 @@ class UMAPWidget(QWidget):
 	def _on_run_umap_clicked(self) -> None:
 		if StandardScaler is None:
 			QMessageBox.critical(self, "Missing dependency", "scikit-learn is required.")
-			return
-		if umap is None:
-			QMessageBox.critical(self, "Missing dependency", "umap-learn is required.")
 			return
 
 		datasets = self.get_selected_datasets()

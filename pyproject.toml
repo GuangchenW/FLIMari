@@ -14,7 +14,8 @@ dependencies = [
 	"scipy",
 	"napari",
 	"qtpy",
-	"phasorpy>=0.6"
+	"phasorpy>=0.6",
+	"umap-learn",
 ]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
