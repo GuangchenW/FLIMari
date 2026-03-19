@@ -308,15 +308,18 @@ class UMAPWidget(QWidget):
 			feats = []
 			for m in metrics:
 				for s in stats:
-					feats.append(ds.image_feature(m, s, harmonic=harmonic))
-			rows.append(feats)
+					# This is always a list of features of each labeled pixel set in image.
+					features = ds.image_feature(m, s, harmonic=harmonic)
+					feats.append(features)
+			# Resulting feats is NxL array, transpose to get rows of features
+			rows.append(np.asarray(feats, dtype=float).T)
 
 		# Unique feature name, shared by datasets
 		for m in metrics:
 			for s in stats:
 				feature_names.append(f"{m}:{s}")
 
-		X = np.asarray(rows, dtype=float)
+		X = np.concat(rows, axis=0)
 		return X, feature_names
 
 	def _preprocess(self, X: np.ndarray) -> np.ndarray:
@@ -401,13 +404,14 @@ class UMAPWidget(QWidget):
 
 		if color_mode == "group":
 			# Plot each group separately so legend is meaningful
-			groups = np.array([ds.group for ds in self._used_datasets], dtype=object)
-			uniq = list(dict.fromkeys(groups.tolist()))
-			for g in uniq:
-				idx = np.where(groups == g)[0]
-				# Use dataset-provided color (same behavior as elsewhere in your project)
-				c = self._used_datasets[idx[0]].color
-				ax.scatter(x[idx], y[idx], label=g, c=c)
+			idx = 0
+			used_labels = set()
+			for ds in self._used_datasets:
+				for l in ds.labels_unique:
+					label = ds.group if ds.group not in used_labels else ""
+					ax.scatter(x[idx], y[idx], label=label, c=ds.color)
+					used_labels.add(ds.group)
+					idx += 1
 			ax.legend(loc="best", fontsize=8)
 
 		elif color_mode == "kmeans":
@@ -432,8 +436,11 @@ class UMAPWidget(QWidget):
 		ax.set_ylabel("UMAP-2")
 
 		if self.annotate_check.isChecked():
-			for i, ds in enumerate(self._used_datasets):
-				ax.annotate(ds.name, (x[i], y[i]), fontsize=7, alpha=0.8)
+			idx = 0
+			for ds in self._used_datasets:
+				for l in ds.labels_unique:
+					ax.annotate(ds.name, (x[idx], y[idx]), fontsize=7, alpha=0.8)
+					idx += 1
 
 		self.graph.draw_idle()
 

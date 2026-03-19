@@ -67,7 +67,7 @@ class Dataset:
 	__slots__ = ("path", "name", "channel", "frequency", "counts", "counts_filtered",
 		"mean", "real_raw", "imag_raw", "real_calibrated", "imag_calibrated", "g", "s",
 		"phase_lifetime", "modulation_lifetime", "normal_lifetime", "geo_lifetime", "geo_fraction", "avg_lifetime",
-		"max_count", "min_count", "kernel_size", "repetition", "mask", "labels", "group", "color")
+		"max_count", "min_count", "kernel_size", "repetition", "mask", "labels", "labels_unique", "group", "color")
 
 	def __init__(self, path:str|Path, channel:int):
 		if not os.path.isfile(path):
@@ -105,6 +105,7 @@ class Dataset:
 
 		# Cached pixel labels (for ROI analysis)
 		self.labels = np.ones_like(self.mean, dtype=np.uint8)
+		self.labels_unique = np.array([1])
 
 		# Misc attributes
 		self.group: str = "default"
@@ -176,6 +177,14 @@ class Dataset:
 			raise ValueError(f"Harmonic {harmonic} outside range")
 		return self.g[idx], self.s[idx]
 
+	def set_labels(self, labels:np.ndarray):
+		"""
+		Set pixel labels and update unique labels.
+		"""
+		self.labels = labels
+		labels = labels[labels>0]
+		self.labels_unique = np.unique_values(labels)
+
 	def set_group(self, group:str) -> None:
 		"""
 		Set the group of this dataset.
@@ -201,53 +210,65 @@ class Dataset:
 		"""Return 1D float array of valid pixel values for a metric."""
 		match metric:
 			case FeatureNames.PHOTON_COUNT:
-				vals = self.counts[self.mask].astype(float).ravel()
+				vals = self.counts.astype(float)
 			case FeatureNames.G:
 				g, _ = self.get_phasor(harmonic=harmonic)
-				vals = g.ravel()
+				vals = g
 			case FeatureNames.S:
 				_, s = self.get_phasor(harmonic=harmonic)
-				vals = s.ravel()
+				vals = s
 			case FeatureNames.PHI_LIFETIME:
-				vals = self.phase_lifetime.ravel()
+				vals = self.phase_lifetime
 			case FeatureNames.M_LIFETIME:
-				vals = self.modulation_lifetime.ravel()
+				vals = self.modulation_lifetime
 			case FeatureNames.PROJ_LIFETIME:
-				vals = self.normal_lifetime.ravel()
+				vals = self.normal_lifetime
 			case FeatureNames.AVG_LIFETIME:
-				vals = self.avg_lifetime.ravel()
+				vals = self.avg_lifetime
 			case FeatureNames.GEO_TAU_1:
-				vals = self.geo_lifetime[0].ravel()
+				vals = self.geo_lifetime[0]
 			case FeatureNames.GEO_TAU_2:
-				vals = self.geo_lifetime[1].ravel()
+				vals = self.geo_lifetime[1]
 			case FeatureNames.GEO_FRAC_1:
-				vals =	self.geo_fraction[0].ravel()
+				vals =	self.geo_fraction[0]
 			case FeatureNames.GEO_FRAC_2:
-				vals = self.geo_fraction[1].ravel()
+				vals = self.geo_fraction[1]
 			case _:
 				raise KeyError(metric)
 
+		keep = (self.labels == label) * self.mask
+		vals = vals[keep].ravel()
+
 		return vals[np.isfinite(vals)]
 
-	def image_feature(self, metric:str, stat:str, harmonic:int=1) -> float:
-		"""Compute one image-level feature = summary stat over pixel values."""
-		v = self.pixel_values(metric, harmonic=harmonic)
-		if v.size == 0:
-			return np.nan
-		if stat == StatsNames.MEDIAN:
-			return np.nanmedian(v)
-		if stat == StatsNames.MEAN:
-			return np.nanmean(v)
-		if stat == StatsNames.STD:
-			return np.nanstd(v)
-		if stat == StatsNames.IQR:
-			q75, q25 = np.nanpercentile(v, [75, 25])
-			return q75 - q25
-		if stat == StatsNames.P10:
-			return np.nanpercentile(v, 10)
-		if stat == StatsNames.P90:
-			return np.nanpercentile(v, 90)
-		raise KeyError(stat)
+	def image_feature(self, feature:str, stat:str, harmonic:int=1) -> float:
+		"""
+		Compute image-level feature, collect all non-background labels.
+		Return length L list containing the feature stats, where L is the number of labels.
+		"""
+		out = []
+		for l in self.labels_unique:
+			v = self.pixel_values(feature, label=l, harmonic=harmonic)
+			if v.size == 0:
+				out.append(np.nan)
+				continue
+			match stat:
+				case StatsNames.MEDIAN:
+					out.append(np.nanmedian(v))
+				case StatsNames.MEAN:
+					out.append(np.nanmean(v))
+				case StatsNames.STD:
+					out.append(np.nanstd(v))
+				case StatsNames.IQR:
+					q75, q25 = np.nanpercentile(v, [75, 25])
+					out.append(q75 - q25)
+				case StatsNames.P10:
+					out.append(np.nanpercentile(v, 10))
+				case StatsNames.P90:
+					out.append(np.nanpercentile(v, 90))
+				case _:
+					raise KeyError(stat)
+		return out
 
 	def display_name(self) -> str:
 		return f"{self.name} (C{self.channel+1}) [{self.group}]"
