@@ -24,9 +24,7 @@ from qtpy.QtWidgets import (
 )
 
 from flimari.core.widgets import MPLGraph
-
-if TYPE_CHECKING:
-	from ..core import Dataset
+from flimari.plugins.phasor.core import FeatureNames, StatsNames, Dataset
 
 import pandas as pd
 
@@ -66,29 +64,10 @@ class UMAPWidget(QWidget):
 
 		# Image-level inputs
 		# NOTE: "g" and "s" use the chosen harmonic; others are scalar images.
-		self.feature_items = [
-			"photon_count",
-			"g",
-			"s",
-			"phi_lifetime",
-			"m_lifetime",
-			"proj_lifetime",
-			"avg_lifetime",
-			"geo_tau1",
-			"geo_tau2",
-			"geo_frac1",
-			"geo_frac2",
-		]
+		self.feature_items = FeatureNames.ALL
 
 		# Aggregations computed per metric -> become final features
-		self.stat_items = [
-			"median",
-			"iqr",
-			"mean",
-			"std",
-			"p10",
-			"p90",
-		]
+		self.stat_items = StatsNames.ALL
 
 		self._build()
 		self._set_status("Ready")
@@ -112,7 +91,7 @@ class UMAPWidget(QWidget):
 		for feat in self.feature_items:
 			it = QListWidgetItem(feat)
 			it.setFlags(it.flags() | 16) # set checkable
-			it.setCheckState(2 if feat in ("g", "s", "proj_lifetime") else 0)  # defaults
+			it.setCheckState(2 if feat in (FeatureNames.G, FeatureNames.S, FeatureNames.PROJ_LIFETIME) else 0)  # defaults
 			self.feature_list.addItem(it)
 		left.addWidget(self.feature_list)
 
@@ -122,7 +101,7 @@ class UMAPWidget(QWidget):
 		for s in self.stat_items:
 			it = QListWidgetItem(s)
 			it.setFlags(it.flags() | 16) # set checkable
-			it.setCheckState(2 if s in ("median", "iqr") else 0) # defaults
+			it.setCheckState(2 if s in (StatsNames.MEDIAN, StatsNames.IQR) else 0) # defaults
 			self.stats_list.addItem(it)
 		left.addWidget(self.stats_list)
 
@@ -361,7 +340,7 @@ class UMAPWidget(QWidget):
 			n_samples, n_features = X.shape
 			max_comps = min(self.pca_components.value(), n_features, max(1, n_samples - 1))
 			if max_comps >= 2:
-				X = PCA(n_components=max_comps, random_state=0).fit_transform(X)
+				X = PCA(n_components=max_comps, random_state=42).fit_transform(X)
 
 		return X
 
@@ -376,7 +355,8 @@ class UMAPWidget(QWidget):
 			n_neighbors=n_neighbors,
 			min_dist=float(self.md_spin.value()),
 			metric=self.umap_metric.currentText(),
-			random_state=0,
+			random_state=42,
+			n_jobs=1,
 		)
 		emb = reducer.fit_transform(X)
 

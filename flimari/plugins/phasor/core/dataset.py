@@ -18,11 +18,56 @@ from flimari.core.utils import str2color
 if TYPE_CHECKING:
 	import xarray
 
+## --- Feature names --- ##
+class FeatureNames:
+	PHOTON_COUNT = "Photon Count"
+	G = "Real Coordinate (G)"
+	S = "Imaginary Coordinate (S)"
+	PHI_LIFETIME = "Phase Lifetime"
+	M_LIFETIME = "Modulation Lifetime"
+	PROJ_LIFETIME = "Projected Normal Lifetime"
+	AVG_LIFETIME = "Searched Average Lifetime"
+	GEO_TAU_1 = "Searched Tau 1"
+	GEO_TAU_2 = "Searched Tau 2"
+	GEO_FRAC_1 = "Searched Alpha 1"
+	GEO_FRAC_2 = "Searched Alpha 2"
+	ALL = [
+		PHOTON_COUNT,
+		G,
+		S,
+		PHI_LIFETIME,
+		M_LIFETIME,
+		PROJ_LIFETIME,
+		AVG_LIFETIME,
+		GEO_TAU_1,
+		GEO_TAU_2,
+		GEO_FRAC_1,
+		GEO_FRAC_2,
+	]
+
+## --- Stats names --- ##
+class StatsNames:
+	MEDIAN = "Median"
+	IQR = "Interquantile Range"
+	MEAN = "Mean"
+	STD = "Stddev"
+	P10 = "10th Percentile"
+	P90 = "90th Percentile"
+	ALL = [
+		MEDIAN,
+		IQR,
+		MEAN,
+		STD,
+		P10,
+		P90,
+	]
+
+## --- Dataset class --- ##
 class Dataset:
 	__slots__ = ("path", "name", "channel", "frequency", "counts", "counts_filtered",
 		"mean", "real_raw", "imag_raw", "real_calibrated", "imag_calibrated", "g", "s",
 		"phase_lifetime", "modulation_lifetime", "normal_lifetime", "geo_lifetime", "geo_fraction", "avg_lifetime",
-		"max_count", "min_count", "kernel_size", "repetition", "mask", "group", "color")
+		"max_count", "min_count", "kernel_size", "repetition", "mask", "labels", "group", "color")
 
 	def __init__(self, path:str|Path, channel:int):
 		if not os.path.isfile(path):
@@ -58,6 +103,9 @@ class Dataset:
 		# Cached photon count thresholding mask
 		self.mask = np.ones_like(self.mean, dtype=np.uint8)
 
+		# Cached pixel labels (for ROI analysis)
+		self.labels = np.ones_like(self.mean, dtype=np.uint8)
+
 		# Misc attributes
 		self.group: str = "default"
 		self.color: str = str2color(self.group)
@@ -85,7 +133,6 @@ class Dataset:
 	def apply_filters(self) -> None:
 		self.reset_gs()
 		self.apply_median_filter()
-		self.update_photon_mask()
 		self.apply_photon_mask()
 		# We always update lifetime estimates to keep everything in sync
 		self.compute_lifetime_estimates()
@@ -98,19 +145,16 @@ class Dataset:
 		if self.repetition < 1: return
 		_, self.g, self.s = phasor_filter_median(self.mean, self.g, self.s, repeat=self.repetition, size=self.kernel_size)
 
-	def update_photon_mask(self) -> None:
-		"""
-		Update mask based on current photon count threshold
-		"""
-		labels = self._photon_range_mask()
-		self.mask = (labels == 1)
-
 	def apply_photon_mask(self) -> None:
 		"""
 		Mask g and s using the photon count mask.
 		This turns the pixels outside the mask to nan.
 		"""
+		# Update photon thrshold mask
+		self.mask = (self._photon_range_mask() == 1)
+		# Set g and s to nan for both harmonics
 		self.g[:,~self.mask] = np.nan; self.s[:,~self.mask] = np.nan
+		# Update filtered photon counts
 		self.counts_filtered = self.counts.copy()
 		self.counts_filtered[~self.mask] = 0 # numpy int cannot be nan
 
@@ -133,6 +177,10 @@ class Dataset:
 		return self.g[idx], self.s[idx]
 
 	def set_group(self, group:str) -> None:
+		"""
+		Set the group of this dataset.
+		Also set the color using the group name.
+		"""
 		self.group = group
 		self.color = str2color(group)
 
@@ -149,32 +197,32 @@ class Dataset:
 		out["avg_lifetime"] = self.avg_lifetime[self.mask]
 		return out
 
-	def pixel_values(self, metric:str, harmonic:int=1) -> np.ndarray:
+	def pixel_values(self, metric:str, label:int=1, harmonic:int=1) -> np.ndarray:
 		"""Return 1D float array of valid pixel values for a metric."""
 		match metric:
-			case "photon_count":
+			case FeatureNames.PHOTON_COUNT:
 				vals = self.counts[self.mask].astype(float).ravel()
-			case "g":
+			case FeatureNames.G:
 				g, _ = self.get_phasor(harmonic=harmonic)
 				vals = g.ravel()
-			case "s":
+			case FeatureNames.S:
 				_, s = self.get_phasor(harmonic=harmonic)
 				vals = s.ravel()
-			case "phi_lifetime":
+			case FeatureNames.PHI_LIFETIME:
 				vals = self.phase_lifetime.ravel()
-			case "m_lifetime":
+			case FeatureNames.M_LIFETIME:
 				vals = self.modulation_lifetime.ravel()
-			case "proj_lifetime":
+			case FeatureNames.PROJ_LIFETIME:
 				vals = self.normal_lifetime.ravel()
-			case "avg_lifetime":
+			case FeatureNames.AVG_LIFETIME:
 				vals = self.avg_lifetime.ravel()
-			case "geo_tau1":
+			case FeatureNames.GEO_TAU_1:
 				vals = self.geo_lifetime[0].ravel()
-			case "geo_tau2":
+			case FeatureNames.GEO_TAU_2:
 				vals = self.geo_lifetime[1].ravel()
-			case "geo_frac1":
+			case FeatureNames.GEO_FRAC_1:
 				vals =	self.geo_fraction[0].ravel()
-			case "geo_frac2":
+			case FeatureNames.GEO_FRAC_2:
 				vals = self.geo_fraction[1].ravel()
 			case _:
 				raise KeyError(metric)
@@ -186,18 +234,18 @@ class Dataset:
 		v = self.pixel_values(metric, harmonic=harmonic)
 		if v.size == 0:
 			return np.nan
-		if stat == "median":
+		if stat == StatsNames.MEDIAN:
 			return np.nanmedian(v)
-		if stat == "mean":
+		if stat == StatsNames.MEAN:
 			return np.nanmean(v)
-		if stat == "std":
+		if stat == StatsNames.STD:
 			return np.nanstd(v)
-		if stat == "iqr":
+		if stat == StatsNames.IQR:
 			q75, q25 = np.nanpercentile(v, [75, 25])
 			return q75 - q25
-		if stat == "p10":
+		if stat == StatsNames.P10:
 			return np.nanpercentile(v, 10)
-		if stat == "p90":
+		if stat == StatsNames.P90:
 			return np.nanpercentile(v, 90)
 		raise KeyError(stat)
 
