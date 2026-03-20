@@ -25,16 +25,13 @@ from qtpy.QtWidgets import (
 
 from flimari.core.widgets import MPLGraph
 from flimari.plugins.phasor.core import FeatureNames, StatsNames, Dataset
+from flimari.plugins.phasor.ml import NormalizationModes, FeatureWorkspace, normalize, do_pca, do_umap
 
 import pandas as pd
-import umap
 
 try:
-	from sklearn.preprocessing import StandardScaler, RobustScaler
-	from sklearn.decomposition import PCA
 	from sklearn.cluster import KMeans, DBSCAN
 except Exception:  # pragma: no cover
-	StandardScaler = RobustScaler = PCA = None
 	KMeans = DBSCAN = None
 
 class UMAPWidget(QWidget):
@@ -50,10 +47,8 @@ class UMAPWidget(QWidget):
 		self._datasets = datasets
 
 		# Cached results for recoloring and export
-		self._embedding: np.ndarray | None = None           # (n, 2)
 		self._used_datasets: list["Dataset"] = []           # aligned to embedding rows
-		self._feature_names: list[str] = []                 # This is feature+stats name
-		self._feature_matrix: np.ndarray | None = None      # (n, d)
+		self._feature_workspace: FeatureWorkspace = FeatureWorkspace()
 
 		self._kmeans_labels: np.ndarray | None = None       # (n,)
 		self._dbscan_labels: np.ndarray | None = None       # (n,)
@@ -135,7 +130,7 @@ class UMAPWidget(QWidget):
 		pp_grid.setContentsMargins(5,10,5,5)
 		pp_grid.addWidget(QLabel("Normalization method:"), 0, 0)
 		self.scaling_combo = QComboBox()
-		self.scaling_combo.addItems(["robust", "zscore", "none"])
+		self.scaling_combo.addItems(NormalizationModes.ALL)
 		pp_grid.addWidget(self.scaling_combo, 0, 1, 1, 2)
 
 		self.pca_check = QCheckBox("PCA before UMAP")
@@ -292,77 +287,34 @@ class UMAPWidget(QWidget):
 	def _build_feature_matrix(
 		self,
 		datasets: list["Dataset"],
-		metrics: list[str],
+		features: list[str],
 		stats: list[str],
 		harmonic: int,
-	) -> tuple[np.ndarray, list[str]]:
-		feature_names = []
-		rows = []
+	):
+		self._feature_workspace.build_features(datasets, features, stats, harmonic)
 
-		# Feature matrix, each row is a dataset
-		for ds in datasets:
-			feats = []
-			for m in metrics:
-				for s in stats:
-					# This is always a list of features of each labeled pixel set in image.
-					features = ds.image_feature(m, s, harmonic=harmonic)
-					feats.append(features)
-			# Resulting feats is NxL array, transpose to get rows of features
-			rows.append(np.asarray(feats, dtype=float).T)
 
-		# Unique feature name, shared by datasets
-		for m in metrics:
-			for s in stats:
-				feature_names.append(f"{m}:{s}")
-
-		X = np.concat(rows, axis=0)
-		return X, feature_names
-
-	def _preprocess(self, X: np.ndarray) -> np.ndarray:
-		if StandardScaler is None or RobustScaler is None:
-			raise RuntimeError("scikit-learn is required for preprocessing (scaling/PCA/clustering).")
-
+	def _preprocess(self):
 		mode = self.scaling_combo.currentText()
-		if mode == "zscore":
-			X = StandardScaler().fit_transform(X)
-		elif mode == "robust":
-			X = RobustScaler().fit_transform(X)
-		elif mode == "none":
-			pass
-		else:
-			raise ValueError(f"Unknown scaling mode: {mode}")
+		normalize(self._feature_workspace, mode)
 
 		if self.pca_check.isChecked():
-			if PCA is None:
-				raise RuntimeError("scikit-learn PCA not available.")
 			# Clip components to feasible range
-			n_samples, n_features = X.shape
+			n_samples, n_features = self._feature_workspace.feature_matrix.shape
 			max_comps = min(self.pca_components.value(), n_features, max(1, n_samples - 1))
 			if max_comps >= 2:
-				X = PCA(n_components=max_comps, random_state=42).fit_transform(X)
+				do_pca(self._feature_workspace, max_comps)
 
-		return X
-
-	def _run_umap(self, X: np.ndarray) -> np.ndarray:
-		if umap is None:
-			raise RuntimeError("umap-learn is required. Install with: pip install umap-learn")
-
-		n_samples = X.shape[0]
+	def _run_umap(self):
+		n_samples = self._feature_workspace.feature_matrix.shape[0]
 		n_neighbors = min(self.nn_spin.value(), max(2, n_samples - 1))
 
-		reducer = umap.UMAP(
-			n_neighbors=n_neighbors,
-			min_dist=float(self.md_spin.value()),
-			metric=self.umap_metric.currentText(),
-			random_state=42,
-			n_jobs=1,
+		do_umap(
+			self._feature_workspace,
+			n_neighbors = n_neighbors,
+			min_dist = self.md_spin.value(),
+			metric = self.umap_metric.currentText(),
 		)
-		emb = reducer.fit_transform(X)
-
-		# Ensure 2D (UMAP defaults to 2)
-		if emb.shape[1] != 2:
-			emb = emb[:, :2]
-		return emb
 
 	def _run_kmeans(self, emb: np.ndarray) -> np.ndarray:
 		if KMeans is None:
@@ -387,14 +339,14 @@ class UMAPWidget(QWidget):
 	# ---------------- Plotting ----------------
 
 	def _redraw(self) -> None:
-		if self._embedding is None or len(self._used_datasets) == 0:
+		if not hasattr(self._feature_workspace, "umap") or len(self._used_datasets) == 0:
 			return
 
 		ax = self.graph.get_ax()
 		ax.clear()
 
-		x = self._embedding[:, 0]
-		y = self._embedding[:, 1]
+		x = self._feature_workspace.umap[:, 0]
+		y = self._feature_workspace.umap[:, 1]
 
 		color_mode = self.color_combo.currentText()
 
@@ -402,12 +354,19 @@ class UMAPWidget(QWidget):
 			# Plot each group separately so legend is meaningful
 			idx = 0
 			used_labels = set()
-			for ds in self._used_datasets:
-				for l in ds.labels_unique:
-					label = ds.group if ds.group not in used_labels else ""
-					ax.scatter(x[idx], y[idx], label=label, c=ds.color)
-					used_labels.add(ds.group)
-					idx += 1
+			for md in self._feature_workspace.metadata:
+				group = md["group"]
+				count = md["count"]
+				ax.scatter(
+					x[idx:idx+count],
+					y[idx:idx+count],
+					label = group if group not in used_labels else "",
+					c=md["color"]
+				)
+				# Record used group labels to prevent duplicate legends
+				used_labels.add(group)
+				idx += count
+
 			ax.legend(loc="best", fontsize=8)
 
 		elif color_mode == "kmeans":
@@ -443,14 +402,7 @@ class UMAPWidget(QWidget):
 	# ---------------- Callbacks ----------------
 
 	def _on_run_umap_clicked(self) -> None:
-		if StandardScaler is None:
-			QMessageBox.critical(self, "Missing dependency", "scikit-learn is required.")
-			return
-
 		datasets = self.get_selected_datasets()
-		#if len(datasets) < 3:
-		#	QMessageBox.warning(self, "Not enough datasets", "Select at least 3 datasets for UMAP.")
-		#	return
 
 		metrics = self._selected_metrics()
 		stats = self._selected_stats()
@@ -461,10 +413,11 @@ class UMAPWidget(QWidget):
 		harmonic = int(self.harmonic_combo.currentText())
 
 		try:
-			X, feature_names = self._build_feature_matrix(datasets, metrics, stats, harmonic=harmonic)
+			self._build_feature_matrix(datasets, metrics, stats, harmonic=harmonic)
 
 			# TODO: Need to change this to accommodate rois
 			# Drop datasets with any NaN feature (e.g. empty mask)
+			"""
 			good = np.isfinite(X).all(axis=1)
 			if not np.all(good):
 				dropped = [datasets[i].name for i in range(len(datasets)) if not good[i]]
@@ -476,23 +429,21 @@ class UMAPWidget(QWidget):
 				)
 				datasets = [datasets[i] for i in range(len(datasets)) if good[i]]
 				X = X[good]
-
+			"""
 			#if len(datasets) < 3:
 			#	QMessageBox.warning(self, "Not enough valid datasets", "Too few valid datasets after filtering.")
 			#	return
 
-			Xp = self._preprocess(X)
-			emb = self._run_umap(Xp)
+			self._preprocess()
+			self._run_umap()
 
 			self._used_datasets = datasets
-			self._feature_matrix = X
-			self._feature_names = feature_names
-			self._embedding = emb
 
 			# Reset clustering caches
 			self._kmeans_labels = None
 			self._dbscan_labels = None
 
+			X = self._feature_workspace.feature_matrix
 			self._set_status(f"UMAP done. n={X.shape[0]}, d={X.shape[1]}")
 			self._redraw()
 
@@ -500,15 +451,11 @@ class UMAPWidget(QWidget):
 			QMessageBox.critical(self, "UMAP error", str(e))
 
 	def _on_run_clustering_clicked(self) -> None:
-		if self._embedding is None:
-			QMessageBox.warning(self, "No embedding", "Run UMAP first.")
-			return
-
 		try:
 			if self.kmeans_check.isChecked():
-				self._kmeans_labels = self._run_kmeans(self._embedding)
+				self._kmeans_labels = self._run_kmeans(self._feature_workspace.umap)
 			if self.dbscan_check.isChecked():
-				self._dbscan_labels = self._run_dbscan(self._embedding)
+				self._dbscan_labels = self._run_dbscan(self._feature_workspace.umap)
 
 			# If user picks a clustering color mode, redraw reflects it
 			self._set_status("Clustering done.")
@@ -518,8 +465,8 @@ class UMAPWidget(QWidget):
 			QMessageBox.critical(self, "Clustering error", str(e))
 
 	def _on_export_clicked(self) -> None:
-		if self._embedding is None or self._feature_matrix is None:
-			QMessageBox.warning(self, "Nothing to export", "Run UMAP first.")
+		if self._feature_workspace is None:
+			QMessageBox.warning(self, "Nothing to export")
 			return
 
 		path, _ = QFileDialog.getSaveFileName(
@@ -530,26 +477,27 @@ class UMAPWidget(QWidget):
 		)
 		if not path: return
 
-		print("Exported features: ", self._feature_names)
-
 		try:
 			rows = []
-			for i, ds in enumerate(self._used_datasets):
-				row = {
-					"name": ds.name,
-					"channel": ds.channel,
-					"group": ds.group,
-					"umap1": float(self._embedding[i, 0]),
-					"umap2": float(self._embedding[i, 1]),
-				}
-				if self._kmeans_labels is not None:
-					row["kmeans"] = int(self._kmeans_labels[i])
-				if self._dbscan_labels is not None:
-					row["dbscan"] = int(self._dbscan_labels[i])
-				# Add features too
-				for j, fn in enumerate(self._feature_names):
-					row[fn] = float(self._feature_matrix[i, j])
-				rows.append(row)
+			idx = 0
+			for md in self._feature_workspace.metadata:
+				for i in range(md["count"]):
+					row = {
+						"name": md["name"],
+						"region": i+1,
+						"group": md["group"],
+						"umap1": float(self._feature_workspace.umap[idx, 0]),
+						"umap2": float(self._feature_workspace.umap[idx, 1]),
+					}
+					if self._kmeans_labels is not None:
+						row["kmeans"] = int(self._kmeans_labels[idx])
+					if self._dbscan_labels is not None:
+						row["dbscan"] = int(self._dbscan_labels[idx])
+					# Add features too
+					for j, fn in enumerate(self._feature_workspace.feature_names):
+						row[fn] = float(self._feature_workspace.feature_matrix[idx, j])
+					rows.append(row)
+					idx += 1
 
 			if pd is not None:
 				pd.DataFrame(rows).to_csv(path, index=False)
@@ -570,10 +518,7 @@ class UMAPWidget(QWidget):
 	def _on_clear_clicked(self) -> None:
 		self.graph.clear()
 		self._set_status("Ready")
-		self._embedding = None
 		self._used_datasets = []
-		self._feature_matrix = None
-		self._feature_names = []
 		self._kmeans_labels = None
 		self._dbscan_labels = None
 

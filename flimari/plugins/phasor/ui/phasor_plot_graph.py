@@ -118,8 +118,7 @@ class PhasorGraphWidget(MPLGraph):
 		:param color: Plot color. 
 		"""
 		# Slice only meaningful values for efficient plotting
-		# TODO: Figure out exactly how to handle g s returns
-		g, s = dataset.get_phasor()
+		g, s = dataset.get_phasor(harmonic=1)
 		g = g[dataset.mask]
 		s = s[dataset.mask]
 		match mode:
