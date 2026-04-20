@@ -49,4 +49,4 @@ class FeatureWorkspace:
 			# Transpose so that each row is a labelled region in an image
 			matrix.append(np.asarray(ds_feats, dtype=float).T)
 
-		self.feature_matrix = np.concat(matrix, axis=0)
+		self.feature_matrix = np.concatenate(matrix, axis=0)
