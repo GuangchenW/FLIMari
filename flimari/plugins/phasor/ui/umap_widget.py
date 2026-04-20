@@ -48,7 +48,7 @@ class UMAPWidget(QWidget):
 
 		# Cached results for recoloring and export
 		self._used_datasets: list["Dataset"] = []           # aligned to embedding rows
-		self._feature_workspace: FeatureWorkspace = FeatureWorkspace()
+		self._workspace: FeatureWorkspace = FeatureWorkspace()
 
 		self._kmeans_labels: np.ndarray | None = None       # (n,)
 		self._dbscan_labels: np.ndarray | None = None       # (n,)
@@ -291,26 +291,26 @@ class UMAPWidget(QWidget):
 		stats: list[str],
 		harmonic: int,
 	):
-		self._feature_workspace.build_features(datasets, features, stats, harmonic)
+		self._workspace.build_features(datasets, features, stats, harmonic)
 
 
 	def _preprocess(self):
 		mode = self.scaling_combo.currentText()
-		normalize(self._feature_workspace, mode)
+		normalize(self._workspace, mode)
 
 		if self.pca_check.isChecked():
 			# Clip components to feasible range
-			n_samples, n_features = self._feature_workspace.feature_matrix.shape
+			n_samples, n_features = self._workspace.feature_matrix.shape
 			max_comps = min(self.pca_components.value(), n_features, max(1, n_samples - 1))
 			if max_comps >= 2:
-				do_pca(self._feature_workspace, max_comps)
+				do_pca(self._workspace, max_comps)
 
 	def _run_umap(self):
-		n_samples = self._feature_workspace.feature_matrix.shape[0]
+		n_samples = self._workspace.feature_matrix.shape[0]
 		n_neighbors = min(self.nn_spin.value(), max(2, n_samples - 1))
 
 		do_umap(
-			self._feature_workspace,
+			self._workspace,
 			n_neighbors = n_neighbors,
 			min_dist = self.md_spin.value(),
 			metric = self.umap_metric.currentText(),
@@ -339,14 +339,14 @@ class UMAPWidget(QWidget):
 	# ---------------- Plotting ----------------
 
 	def _redraw(self) -> None:
-		if not hasattr(self._feature_workspace, "umap") or len(self._used_datasets) == 0:
+		if not hasattr(self._workspace, "umap") or len(self._used_datasets) == 0:
 			return
 
 		ax = self.graph.get_ax()
 		ax.clear()
 
-		x = self._feature_workspace.umap[:, 0]
-		y = self._feature_workspace.umap[:, 1]
+		x = self._workspace.umap[:, 0]
+		y = self._workspace.umap[:, 1]
 
 		color_mode = self.color_combo.currentText()
 
@@ -354,7 +354,7 @@ class UMAPWidget(QWidget):
 			# Plot each group separately so legend is meaningful
 			idx = 0
 			used_labels = set()
-			for md in self._feature_workspace.metadata:
+			for md in self._workspace.metadata:
 				group = md["group"]
 				count = md["count"]
 				ax.scatter(
@@ -443,7 +443,7 @@ class UMAPWidget(QWidget):
 			self._kmeans_labels = None
 			self._dbscan_labels = None
 
-			X = self._feature_workspace.feature_matrix
+			X = self._workspace.feature_matrix
 			self._set_status(f"UMAP done. n={X.shape[0]}, d={X.shape[1]}")
 			self._redraw()
 
@@ -453,9 +453,9 @@ class UMAPWidget(QWidget):
 	def _on_run_clustering_clicked(self) -> None:
 		try:
 			if self.kmeans_check.isChecked():
-				self._kmeans_labels = self._run_kmeans(self._feature_workspace.umap)
+				self._kmeans_labels = self._run_kmeans(self._workspace.umap)
 			if self.dbscan_check.isChecked():
-				self._dbscan_labels = self._run_dbscan(self._feature_workspace.umap)
+				self._dbscan_labels = self._run_dbscan(self._workspace.umap)
 
 			# If user picks a clustering color mode, redraw reflects it
 			self._set_status("Clustering done.")
@@ -465,7 +465,7 @@ class UMAPWidget(QWidget):
 			QMessageBox.critical(self, "Clustering error", str(e))
 
 	def _on_export_clicked(self) -> None:
-		if self._feature_workspace is None:
+		if self._workspace is None:
 			QMessageBox.warning(self, "Nothing to export")
 			return
 
@@ -480,22 +480,22 @@ class UMAPWidget(QWidget):
 		try:
 			rows = []
 			idx = 0
-			for md in self._feature_workspace.metadata:
+			for md in self._workspace.metadata:
 				for i in range(md["count"]):
 					row = {
 						"name": md["name"],
 						"region": i+1,
 						"group": md["group"],
-						"umap1": float(self._feature_workspace.umap[idx, 0]),
-						"umap2": float(self._feature_workspace.umap[idx, 1]),
+						"umap1": float(self._workspace.umap[idx, 0]),
+						"umap2": float(self._workspace.umap[idx, 1]),
 					}
 					if self._kmeans_labels is not None:
 						row["kmeans"] = int(self._kmeans_labels[idx])
 					if self._dbscan_labels is not None:
 						row["dbscan"] = int(self._dbscan_labels[idx])
 					# Add features too
-					for j, fn in enumerate(self._feature_workspace.feature_names):
-						row[fn] = float(self._feature_workspace.feature_matrix[idx, j])
+					for j, fn in enumerate(self._workspace.feature_names):
+						row[fn] = float(self._workspace.feature_matrix[idx, j])
 					rows.append(row)
 					idx += 1
 
