@@ -82,7 +82,7 @@ class UMAPWidget(QWidget):
 		self.feature_list.setSelectionMode(QAbstractItemView.NoSelection)
 		for feat in self.feature_items:
 			it = QListWidgetItem(feat)
-			it.setFlags(it.flags() | Qt.ItemIsUserCheckable) # set checkable
+			it.setFlags(it.flags() | Qt.ItemFlag(16)) # set checkable
 			if feat in (FeatureNames.G, FeatureNames.S, FeatureNames.PROJ_LIFETIME):
 				it.setCheckState(Qt.Checked)
 			else:
@@ -95,8 +95,11 @@ class UMAPWidget(QWidget):
 		self.stats_list.setSelectionMode(QAbstractItemView.NoSelection)
 		for s in self.stat_items:
 			it = QListWidgetItem(s)
-			it.setFlags(it.flags() | 16) # set checkable
-			it.setCheckState(2 if s in (StatsNames.MEDIAN, StatsNames.IQR) else 0) # defaults
+			it.setFlags(it.flags() | Qt.ItemFlag(16)) # set checkable
+			if s in (StatsNames.MEDIAN, StatsNames.IQR):
+				it.setCheckState(Qt.Checked)
+			else:
+				it.setCheckState(Qt.Unchecked)
 			self.stats_list.addItem(it)
 		left.addWidget(self.stats_list)
 
@@ -276,7 +279,7 @@ class UMAPWidget(QWidget):
 		out = []
 		for i in range(self.feature_list.count()):
 			it = self.feature_list.item(i)
-			if it.checkState() == 2:
+			if it.checkState() == Qt.CheckState(2):
 				out.append(it.text())
 		return out
 
@@ -284,7 +287,7 @@ class UMAPWidget(QWidget):
 		out = []
 		for i in range(self.stats_list.count()):
 			it = self.stats_list.item(i)
-			if it.checkState() == 2:
+			if it.checkState() == Qt.CheckState(2):
 				out.append(it.text())
 		return out
 
