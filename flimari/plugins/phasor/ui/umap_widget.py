@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Iterable
 
 import numpy as np
 
+from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
 	QWidget,
 	QHBoxLayout,
@@ -81,8 +82,11 @@ class UMAPWidget(QWidget):
 		self.feature_list.setSelectionMode(QAbstractItemView.NoSelection)
 		for feat in self.feature_items:
 			it = QListWidgetItem(feat)
-			it.setFlags(it.flags() | 16) # set checkable
-			it.setCheckState(2 if feat in (FeatureNames.G, FeatureNames.S, FeatureNames.PROJ_LIFETIME) else 0)  # defaults
+			it.setFlags(it.flags() | Qt.ItemIsUserCheckable) # set checkable
+			if feat in (FeatureNames.G, FeatureNames.S, FeatureNames.PROJ_LIFETIME):
+				it.setCheckState(Qt.Checked)
+			else:
+				it.setCheckState(Qt.Unchecked)
 			self.feature_list.addItem(it)
 		left.addWidget(self.feature_list)
 
