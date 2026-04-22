@@ -38,6 +38,7 @@ class ExternalDataset(Dataset):
 		if self.frequency <= 0: self.frequency = 80.0
 
 		# --- Phasor coordinates --- #
+		# TODO: Might need to be careful here about pointers
 		g = np.asarray(data["g"], dtype=float)
 		s = np.asarray(data["s"], dtype=float)
 		g_orig = np.asarray(data.get("g_original", g), dtype=float)
