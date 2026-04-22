@@ -5,7 +5,7 @@ It provides an interactive, phasor-based lifetime visualization and analysis pip
 
 ***For a comprehensive user guide and additional resources, please refer to the [FLIMari documentation](https://guangchenw.github.io/FLIMari/).***
 
-> ⚠️ **Pre-Alpha Notice**  
+> ⚠️ **Alpha Notice**  
 > FLIMari is in **early development**. Features, APIs, and structure are subject to change.  
 > Not yet intended for public use.
 
