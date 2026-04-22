@@ -1,6 +1,6 @@
 [project]
 name = "flimari"
-version = "0.2.0"
+version = "0.2.0a1"
 description = "FLIMari"
 authors = [
 	{name="Guangchen Wang", email="wangg4@tcd.ie"}
