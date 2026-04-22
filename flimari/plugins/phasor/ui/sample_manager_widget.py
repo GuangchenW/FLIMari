@@ -26,13 +26,14 @@ from qtpy.QtWidgets import (
 	QStyle
 )
 
-from flimari.core.napari import LayerManager
-from flimari.core.io import load_signal
+from flimari.core import LayerManager
+from flimari.core import load_signal
 from flimari.core.widgets import ThemedButton, Indicator
+import flimari.core.bridge as _bridge
 from .phasor_plot_widget import PhasorPlotWidget
 from .summary_widget import SummaryWidget
 from .umap_widget import UMAPWidget
-from ..core import Dataset
+from ..core import Dataset, ExternalDataset
 
 if TYPE_CHECKING:
 	import xarray
@@ -165,7 +166,7 @@ class SampleManagerWidget(QWidget):
 		cal_widget: "CalibrationWidget",
 		parent: QWidget|None = None,
 	):
-		# NOTE: The viewer is passed around because it is needed for determining 
+		# NOTE: The viewer is passed around because it is needed for determining
 		# the icon to use depending on lihgt and dark theme.
 		super().__init__(parent)
 		self.viewer = viewer
@@ -176,6 +177,7 @@ class SampleManagerWidget(QWidget):
 		cal_widget.calibrationChanged.connect(self._mark_all_stale)
 		self.param_names: list[str] = ["min_count", "max_count", "kernel_size", "repetition"]
 
+		_bridge.register_import_callback(self._import_from_napari_phasors)
 		self._build()
 
 	## ------ UI ------ ##
@@ -407,6 +409,20 @@ class SampleManagerWidget(QWidget):
 		umap_widget = UMAPWidget(datasets)
 		dock = self.viewer.window.add_dock_widget(umap_widget, name="UMAP Analysis", area="bottom")
 		dock.setFloating(True)
+
+	def _import_from_napari_phasors(self, data_list: list[dict]) -> None:
+		"""
+		Receive phasor data from napari-phasors and add each entry as a Dataset.
+		Called via flimari.bridge by the napari-phasors WriterWidget.
+		"""
+		for data in progress(data_list, desc="Importing from napari-phasors"):
+			ds = ExternalDataset(data)
+			item = QListWidgetItem(self.dataset_list)
+			row = DatasetRow(ds, self.viewer)
+			row.bind(self.dataset_list, item)
+			item.setSizeHint(row.sizeHint())
+			self.dataset_list.addItem(item)
+			self.dataset_list.setItemWidget(item, row)
 
 	def _mark_all_stale(self) -> None:
 		# DANGER: manually changing phi_0 and m_0 does not trigger this
