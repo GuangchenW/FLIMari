@@ -5,7 +5,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from phasorpy.phasor import phasor_from_signal, phasor_filter_median
+from phasorpy.phasor import phasor_from_signal
+from phasorpy.filter import phasor_filter_median
 from phasorpy.lifetime import (
 	phasor_to_apparent_lifetime,
 	phasor_to_normal_lifetime,

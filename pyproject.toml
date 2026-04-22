@@ -1,12 +1,12 @@
 [project]
 name = "flimari"
-version = "0.1.0"
+version = "0.2.0"
 description = "FLIMari"
 authors = [
 	{name="Guangchen Wang", email="wangg4@tcd.ie"}
 ]
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
 	"numpy",
 	"tifffile",
@@ -14,7 +14,7 @@ dependencies = [
 	"scipy",
 	"napari",
 	"qtpy",
-	"phasorpy>=0.6",
+	"phasorpy>=0.9",
 	"umap-learn",
 ]
 classifiers = [
