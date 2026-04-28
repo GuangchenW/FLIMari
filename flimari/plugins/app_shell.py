@@ -16,7 +16,7 @@ import numpy as np
 from napari import Viewer
 
 from flimari.config.defaults import Defaults
-from flimari.core.napari import LayerManager
+from flimari.core import LayerManager
 
 # HACK: Gotta clean up imports at some point
 from .phasor.ui.calibration_widget import CalibrationWidget

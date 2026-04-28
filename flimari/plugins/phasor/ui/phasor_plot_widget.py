@@ -9,7 +9,7 @@ from qtpy.QtWidgets import (
 )
 from matplotlib.colors import to_rgb
 
-from flimari.core.napari import LayerManager
+from flimari.core import LayerManager
 from ..core import labels_from_roi
 from .phasor_plot_graph import PhasorGraphWidget
 from .phasor_plot_control import PhasorControlPanel

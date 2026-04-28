@@ -50,3 +50,17 @@ class FeatureWorkspace:
 			matrix.append(np.asarray(ds_feats, dtype=float).T)
 
 		self.feature_matrix = np.concatenate(matrix, axis=0)
+
+		# Drop rows with any NaN (labels whose pixel mask is empty for some feature).
+		# Update metadata counts so plotting offsets remain consistent.
+		valid = np.isfinite(self.feature_matrix).all(axis=1)
+		if not np.all(valid):
+			self.feature_matrix = self.feature_matrix[valid]
+			idx = 0
+			for md in self.metadata:
+				count = md["count"]
+				md["count"] = int(valid[idx:idx + count].sum())
+				idx += count
+
+	def del_attr(self, attr:str):
+		if hasattr(self, attr): delattr(self, attr)
