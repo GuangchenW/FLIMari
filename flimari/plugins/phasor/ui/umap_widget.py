@@ -311,6 +311,8 @@ class UMAPWidget(QWidget):
 			max_comps = min(self.pca_components.value(), n_features, max(1, n_samples - 1))
 			if max_comps >= 2:
 				do_pca(self._workspace, max_comps)
+		else:
+			self._workspace.del_attr("pca")
 
 	def _run_umap(self):
 		n_samples = self._workspace.feature_matrix.shape[0]

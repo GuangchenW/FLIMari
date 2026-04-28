@@ -61,3 +61,6 @@ class FeatureWorkspace:
 				count = md["count"]
 				md["count"] = int(valid[idx:idx + count].sum())
 				idx += count
+
+	def del_attr(self, attr:str):
+		if hasattr(self, attr): delattr(self, attr)
