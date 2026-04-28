@@ -89,12 +89,12 @@ class ExternalDataset(Dataset):
 		self.compute_lifetime_estimates()
 
 		# --- Labels / ROI --- #
-		self.labels: np.ndarray        = np.ones(g.shape[1:], dtype=np.uint8)
+		self.labels: np.ndarray = np.ones(g.shape[1:], dtype=np.uint8)
 		self.labels_unique: np.ndarray = np.array([1])
 
 		# --- Metadata --- #
-		self.group: str  = "default"
-		self.color: str  = str2color(self.group)
+		self.group: str = "default"
+		self.color: str = str2color(self.group)
 
 	# Override display_name to make the origin visible in the UI.
 	def display_name(self) -> str:
