@@ -25,7 +25,7 @@ from qtpy.QtWidgets import (
 )
 
 from flimari.core.widgets import MPLGraph
-from flimari.plugins.phasor.core import FeatureNames, StatsNames, Dataset
+from flimari.plugins.phasor.core import FeatureNames, StatsNames, MorphFeatureNames, Dataset
 from flimari.plugins.phasor.ml import NormalizationModes, FeatureWorkspace, normalize, do_pca, do_umap
 
 import pandas as pd
@@ -61,6 +61,9 @@ class UMAPWidget(QWidget):
 		# Aggregations computed per metric -> become final features
 		self.stat_items = StatsNames.ALL
 
+		# Morphological features (no stats interaction)
+		self.morph_items = MorphFeatureNames.ALL
+
 		self._build()
 		self._set_status("Ready")
 
@@ -77,7 +80,7 @@ class UMAPWidget(QWidget):
 		# --- Left: feature selection --- #
 		left = QVBoxLayout()
 		# Features selection checklist
-		left.addWidget(QLabel("Image features:"))
+		left.addWidget(QLabel("Lifetime features:"))
 		self.feature_list = QListWidget()
 		self.feature_list.setSelectionMode(QAbstractItemView.NoSelection)
 		for feat in self.feature_items:
@@ -102,6 +105,16 @@ class UMAPWidget(QWidget):
 				it.setCheckState(Qt.Unchecked)
 			self.stats_list.addItem(it)
 		left.addWidget(self.stats_list)
+
+		left.addWidget(QLabel("Morphological features:"))
+		self.morph_list = QListWidget()
+		self.morph_list.setSelectionMode(QAbstractItemView.NoSelection)
+		for m in self.morph_items:
+			it = QListWidgetItem(m)
+			it.setFlags(it.flags() | Qt.ItemFlag(16))
+			it.setCheckState(Qt.Unchecked)
+			self.morph_list.addItem(it)
+		left.addWidget(self.morph_list)
 
 		# Harmonic selection
 		harm_row = QHBoxLayout()
@@ -291,14 +304,23 @@ class UMAPWidget(QWidget):
 				out.append(it.text())
 		return out
 
+	def _selected_morph(self) -> list[str]:
+		out = []
+		for i in range(self.morph_list.count()):
+			it = self.morph_list.item(i)
+			if it.checkState() == Qt.CheckState(2):
+				out.append(it.text())
+		return out
+
 	def _build_feature_matrix(
 		self,
 		datasets: list["Dataset"],
-		features: list[str],
+		lifetime_features: list[str],
 		stats: list[str],
 		harmonic: int,
+		morph_features: list[str],
 	):
-		self._workspace.build_features(datasets, features, stats, harmonic)
+		self._workspace.build_features(datasets, lifetime_features, stats, harmonic, morph_features)
 
 
 	def _preprocess(self):
@@ -415,33 +437,24 @@ class UMAPWidget(QWidget):
 
 		metrics = self._selected_metrics()
 		stats = self._selected_stats()
-		if len(metrics) == 0 or len(stats) == 0:
-			QMessageBox.warning(self, "No features selected", "Select at least 1 metric and 1 summary stat.")
+		morph = self._selected_morph()
+		if (len(metrics) == 0 or len(stats) == 0) and len(morph) == 0:
+			QMessageBox.warning(self, "No features selected", "Select at least 1 metric + stat, or 1 morphological feature.")
+			return
+		if len(metrics) > 0 and len(stats) == 0:
+			QMessageBox.warning(self, "No stats selected", "Select at least 1 summary stat for the chosen image features.")
 			return
 
 		harmonic = int(self.harmonic_combo.currentText())
 
 		try:
-			self._build_feature_matrix(datasets, metrics, stats, harmonic=harmonic)
-
-			# TODO: Need to change this to accommodate rois
-			# Drop datasets with any NaN feature (e.g. empty mask)
-			"""
-			good = np.isfinite(X).all(axis=1)
-			if not np.all(good):
-				dropped = [datasets[i].name for i in range(len(datasets)) if not good[i]]
-				QMessageBox.warning(
-					self,
-					"Dropped datasets",
-					"Some datasets had no valid pixels for the selected features and were dropped:\n"
-					+ "\n".join(dropped),
-				)
-				datasets = [datasets[i] for i in range(len(datasets)) if good[i]]
-				X = X[good]
-			"""
-			#if len(datasets) < 3:
-			#	QMessageBox.warning(self, "Not enough valid datasets", "Too few valid datasets after filtering.")
-			#	return
+			self._build_feature_matrix(
+				datasets,
+				lifetime_features = metrics,
+				stats = stats,
+				harmonic = harmonic,
+				morph_features=morph,
+			)
 
 			self._preprocess()
 			self._run_umap()

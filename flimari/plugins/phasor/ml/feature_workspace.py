@@ -18,8 +18,11 @@ class FeatureWorkspace:
 		features:list[str],
 		stats:list[str],
 		harmonic:int = 1,
+		morph_features:list[str] = (),
 	):
-		if len(datasets) == 0 or len(features) == 0 or len(stats) == 0:
+		if len(datasets) == 0 or (len(features) == 0 and len(morph_features) == 0):
+			return
+		if len(features) > 0 and len(stats) == 0:
 			return
 
 		# Build metadata
@@ -32,11 +35,13 @@ class FeatureWorkspace:
 				"count": len(ds.labels_unique),
 			})
 
-		# Make list of feature names 
+		# Make list of feature names
 		self.feature_names = []
 		for f in features:
 			for s in stats:
 				self.feature_names.append(f"{f}:{s}")
+		for mf in morph_features:
+			self.feature_names.append(mf)
 
 		# Build feature matrix
 		matrix = []
@@ -44,8 +49,10 @@ class FeatureWorkspace:
 			ds_feats = []
 			for f in features:
 				for s in stats:
-					# Becomes [F*S, L] array, each subarray is the feature of labelled regions
+					# Becomes [F*S+M, L] array, each subarray is the feature of labelled regions
 					ds_feats.append(ds.image_feature(f, s, harmonic=harmonic))
+			for mf in morph_features:
+				ds_feats.append(ds.morphological_feature(mf))
 			# Transpose so that each row is a labelled region in an image
 			matrix.append(np.asarray(ds_feats, dtype=float).T)
 

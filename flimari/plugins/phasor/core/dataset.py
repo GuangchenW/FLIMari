@@ -46,6 +46,17 @@ class FeatureNames:
 		GEO_FRAC_2,
 	]
 
+## --- Morphological feature names --- ##
+class MorphFeatureNames:
+	AREA = "Area"
+	AXIAL_RATIO = "Minor/Major Axis Ratio"
+	PERIMETER = "Perimeter"
+	CIRCULARITY = "Circularity"
+	ECCENTRICITY = "Eccentricity"
+	SOLIDITY = "Solidity"
+	EXTENT = "Extent"
+	ALL = [AREA, AXIAL_RATIO, PERIMETER, CIRCULARITY, ECCENTRICITY, SOLIDITY, EXTENT]
+
 ## --- Stats names --- ##
 class StatsNames:
 	MEDIAN = "Median"
@@ -54,14 +65,7 @@ class StatsNames:
 	STD = "Stddev"
 	P10 = "10th Percentile"
 	P90 = "90th Percentile"
-	ALL = [
-		MEDIAN,
-		IQR,
-		MEAN,
-		STD,
-		P10,
-		P90,
-	]
+	ALL = [MEDIAN, IQR, MEAN, STD, P10, P90]
 
 ## --- Dataset class --- ##
 class Dataset:
@@ -269,6 +273,39 @@ class Dataset:
 					out.append(np.nanpercentile(v, 90))
 				case _:
 					raise KeyError(stat)
+		return out
+
+	def morphological_feature(self, morph_feat: str) -> list[float]:
+		"""
+		Return morphological feature values for each unique label.
+		Computed on the raw labels mask, independent of the photon count threshold.
+		"""
+		from skimage.measure import regionprops
+		props_map = {p.label: p for p in regionprops(self.labels)}
+		out = []
+		for l in self.labels_unique:
+			props = props_map.get(l)
+			if props is None:
+				out.append(np.nan)
+				continue
+			match morph_feat:
+				case MorphFeatureNames.AREA:
+					out.append(float(props.area))
+				case MorphFeatureNames.AXIAL_RATIO:
+					out.append(float(props.axis_minor_length/props.axis_major_length))
+				case MorphFeatureNames.PERIMETER:
+					out.append(float(props.perimeter))
+				case MorphFeatureNames.CIRCULARITY:
+					p = props.perimeter
+					out.append(4 * np.pi * props.area / p**2 if p > 0 else np.nan)
+				case MorphFeatureNames.ECCENTRICITY:
+					out.append(float(props.eccentricity))
+				case MorphFeatureNames.SOLIDITY:
+					out.append(float(props.solidity))
+				case MorphFeatureNames.EXTENT:
+					out.append(float(props.extent))
+				case _:
+					raise KeyError(morph_feat)
 		return out
 
 	def display_name(self) -> str:
