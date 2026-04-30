@@ -423,9 +423,9 @@ class UMAPWidget(QWidget):
 
 		if self.annotate_check.isChecked():
 			idx = 0
-			for ds in self._used_datasets:
-				for l in ds.labels_unique:
-					ax.annotate(ds.name, (x[idx], y[idx]), fontsize=7, alpha=0.8)
+			for mt in self._workspace.metadata:
+				for l in range(mt["count"]):
+					ax.annotate(mt["name"], (x[idx], y[idx]), fontsize=7, alpha=0.8)
 					idx += 1
 
 		self.graph.draw_idle()
