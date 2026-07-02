@@ -21,6 +21,7 @@ Dict schema (all numpy arrays must be float64-compatible)::
         "g_original":    ndarray,        # [Harmonics, Y, X] pre-calibration G  (optional)
         "s_original":    ndarray,        # [Harmonics, Y, X] pre-calibration S  (optional)
         "mean":          ndarray,        # [Y, X]    mean intensity       (optional)
+        "counts":        ndarray,        # [Y, X]    true photon counts (mean × histogram bins) (optional, default mean)
         "min_count":     int,            # lower intensity threshold      (optional, default 0)
         "max_count":     int | None,     # upper intensity threshold      (optional, default None)
         "filter_size":   int,            # median filter kernel size      (optional, default 3)
