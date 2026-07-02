@@ -63,8 +63,9 @@ class ExternalDataset(Dataset):
 		mean_default = np.ones(g.shape[1:], dtype=float)
 		mean = np.asarray(data.get("mean", mean_default), dtype=float)
 		self.mean = mean
-		# HACK: No good way to get photon counts, use mean as placeholder
-		self.counts = mean
+		# napari-phasors sends true per-pixel photon counts (mean × histogram bins)
+		counts = data.get("counts", None)
+		self.counts = np.asarray(counts, dtype=float) if counts is not None else mean
 
 		# --- Mask --- #
 		# napari-phasors marks excluded pixels as NaN in the working G/S.
@@ -73,7 +74,6 @@ class ExternalDataset(Dataset):
 
 		# --- Filter parameters --- #
 		# Record what napari-phasors already applied so the UI reflects it.
-		# BUG: napari-phasors uses mean threshold, not photon count threshold
 		self.min_count: int  = int(data.get("min_count", 0))
 		max_count = data.get("max_count", None)
 		self.max_count: int  = int(max_count) if max_count is not None else int(1e9)
@@ -81,7 +81,7 @@ class ExternalDataset(Dataset):
 		self.repetition: int  = int(data.get("filter_repeat", 0))
 
 		# Filtered counts: zero out masked pixels (ints can't be NaN)
-		self.counts_filtered: np.ndarray = mean.copy()
+		self.counts_filtered: np.ndarray = self.counts.copy()
 		self.counts_filtered[~self.mask] = 0
 
 		# --- Lifetime estimates --- #
