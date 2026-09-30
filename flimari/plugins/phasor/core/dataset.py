@@ -1,5 +1,7 @@
+from __future__ import annotations
 import os
 import uuid
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -68,11 +70,43 @@ class StatsNames:
 	ALL = [MEDIAN, IQR, MEAN, STD, P10, P90]
 
 ## --- Dataset class --- ##
+def persist(**kwargs):
+	"""Mark a field as part of the saved state."""
+	return field(metadata={"persist": True}, **kwargs)
+
+@dataclass(slots=True, init=False, eq=False, repr=False)
 class Dataset:
-	__slots__ = ("id", "path", "name", "channel", "frequency", "counts", "counts_filtered",
-		"mean", "real_raw", "imag_raw", "real_calibrated", "imag_calibrated", "g", "s",
-		"phase_lifetime", "modulation_lifetime", "normal_lifetime", "geo_lifetime", "geo_fraction", "avg_lifetime",
-		"max_count", "min_count", "kernel_size", "repetition", "mask", "labels", "labels_unique", "group", "color")
+	# --- Saved state --- #
+	id: uuid.UUID = persist()
+	name: str = persist()
+	path: Path = persist()
+	channel: int = persist()
+	frequency: float = persist() # Last seen frequency (MHz)
+	counts: np.ndarray = persist() # Photon counts summed over H axis
+	mean: np.ndarray = persist()
+	real_raw: np.ndarray = persist() # Raw phasor, harmonics [1, 2]
+	imag_raw: np.ndarray = persist()
+	real_calibrated: np.ndarray = persist()
+	imag_calibrated: np.ndarray = persist()
+	g: np.ndarray = persist() # Working phasor (calibrated, filtered, masked)
+	s: np.ndarray = persist()
+	mask: np.ndarray = persist() # Photon count threshold mask
+	labels: np.ndarray = persist() # Pixel labels for ROI analysis
+	min_count: int = persist()
+	max_count: int = persist()
+	kernel_size: int = persist()
+	repetition: int = persist()
+	group: str = persist()
+	# --- Derived states --- #
+	counts_filtered: np.ndarray
+	phase_lifetime: np.ndarray
+	modulation_lifetime: np.ndarray
+	normal_lifetime: np.ndarray
+	geo_lifetime: np.ndarray
+	geo_fraction: np.ndarray
+	avg_lifetime: np.ndarray
+	labels_unique: np.ndarray
+	color: str
 
 	def __init__(self, path:str|Path, channel:int):
 		path = Path(path)
@@ -109,7 +143,35 @@ class Dataset:
 		self.group = "default"
 		self.color = str2color(self.group)
 
+	## ------ Serialization ------ ##
+	def to_dict(self) -> dict:
+		d = {}
+		for f in fields(self):
+			if f.metadata.get("persist"):
+				d[f.name] = _to_serializable(getattr(self, f.name))
+		return d
 
+	@classmethod
+	def from_dict(cls, d:dict) -> Dataset:
+		"""
+		Returns a dataset from saved dictionary.
+		"""
+		ds = cls.__new__(cls) # Don't use __init__
+		for f in fields(cls):
+			if f.metadata.get("persist"):
+				setattr(ds, f.name, d[f.name])
+		# Restore rich types
+		ds.id = uuid.UUID(d["id"])
+		ds.path = Path(d["path"])
+		ds.mask = ds.mask.astype(bool)
+		# Rebuild derived states
+		ds.counts_filtered = np.where(ds.mask, ds.counts, 0)
+		ds.set_labels(d["labels"])
+		ds.set_group(d["group"])
+		ds.compute_lifetime_estimates()
+		return ds
+
+	## ------ Working functions ------ ##
 	def calibrate_phasor(self, calibration:Calibration) -> None:
 		self.real_calibrated, self.imag_calibrated = calibration.compute_calibrated_phasor(self.real_raw, self.imag_raw)
 		# Update last seen frequency if calibration is provided
@@ -129,7 +191,6 @@ class Dataset:
 		#DEBUG
 		self.avg_lifetime[self.avg_lifetime>10] = np.nan
 
-	## ------ Working functions ------ ##
 	def apply_filters(self) -> None:
 		self.reset_gs()
 		self.apply_median_filter()
@@ -319,3 +380,13 @@ class Dataset:
 		labels[high] = 2
 		return labels
 
+## --- Serialization helper --- ##
+def _to_serializable(value):
+	"""Convert a field value to a numpy array or a JSON-compatible scalar."""
+	if isinstance(value, np.ndarray):
+		return value
+	if isinstance(value, np.generic): # numpy scalar
+		return value.item()
+	if isinstance(value, (uuid.UUID, Path)):
+		return str(value)
+	return value
