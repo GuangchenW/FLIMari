@@ -1,7 +1,7 @@
 import os
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
-from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -17,7 +17,7 @@ from flimari.core import load_signal
 from flimari.core.utils import str2color
 
 if TYPE_CHECKING:
-	import xarray
+	from .calibration import Calibration
 
 ## --- Feature names --- ##
 class FeatureNames:
@@ -69,54 +69,48 @@ class StatsNames:
 
 ## --- Dataset class --- ##
 class Dataset:
-	__slots__ = ("path", "name", "channel", "frequency", "counts", "counts_filtered",
+	__slots__ = ("id", "path", "name", "channel", "frequency", "counts", "counts_filtered",
 		"mean", "real_raw", "imag_raw", "real_calibrated", "imag_calibrated", "g", "s",
 		"phase_lifetime", "modulation_lifetime", "normal_lifetime", "geo_lifetime", "geo_fraction", "avg_lifetime",
 		"max_count", "min_count", "kernel_size", "repetition", "mask", "labels", "labels_unique", "group", "color")
 
 	def __init__(self, path:str|Path, channel:int):
-		if not os.path.isfile(path):
-			raise OSError(2, "No such file or directory", os.path.basename(path))
-		# Essential data definition
-		self.path: str|Path = path
-		self.name: str = os.path.basename(path)
-		self.channel: int = channel
+		path = Path(path)
+		if not path.is_file():
+			raise FileNotFoundError(path)
+		
 		signal = load_signal(path, channel)
+		frequency = signal.attrs.get("frequency", 80)
+		mean, real, imag = phasor_from_signal(signal, axis='H', harmonic=[1,2])
+		counts = signal.sum(dim='H').to_numpy() # Sum of photon counts over H axis
 
-		# Derived attributes
-		self.counts: np.ndarray = signal.sum(dim='H').to_numpy() # Sum of photon counts over H axis
-		self.counts_filtered: np.ndarray = self.counts.copy() # Photon counts but filtered with threshold
-		# Raw immutable phasor attributes
-		self.mean, self.real_raw, self.imag_raw = phasor_from_signal(signal, axis='H', harmonic=[1,2])
-		# Last seen frequency (MHz)
-		self.frequency: float = signal.attrs.get("frequency", 80)
-		self.frequency = self.frequency if self.frequency > 0 else 80
-		# Calibrated phasors
-		self.real_calibrated: np.ndarray = self.real_raw.copy()
-		self.imag_calibrated: np.ndarray = self.imag_raw.copy()
-		# Working data copy
-		self.g: np.ndarray = self.real_calibrated.copy()
-		self.s: np.ndarray = self.imag_calibrated.copy()
-		# Compute apprent and normal lifetimes
+		self._init_state(
+			name=path.name, path=path, channel=channel, frequency=frequency,
+			counts=counts, mean=mean, real_raw=real, imag_raw=imag
+		)
+
 		self.compute_lifetime_estimates()
 
-		# Filter parameters
-		self.min_count: int = 0
-		self.max_count: int = 10000
-		self.kernel_size: int = 3
-		self.repetition: int = 0
-		# Cached photon count thresholding mask
-		self.mask = np.ones_like(self.mean, dtype=np.uint8)
-
-		# Cached pixel labels (for ROI analysis)
-		self.labels = np.ones_like(self.mean, dtype=np.uint8)
+	def _init_state(self, *, name, path, channel, frequency, counts, mean, real_raw, imag_raw) -> None:
+		"""Declare attributes and set it to its default state."""
+		self.id = uuid.uuid4() # Unique dataset id
+		self.name, self.path, self.channel = name, path, channel
+		self.frequency = frequency if frequency > 0 else 80 # Mhz
+		self.counts, self.mean = counts, mean
+		self.real_raw, self.imag_raw = real_raw, imag_raw
+		self.real_calibrated, self.imag_calibrated = real_raw.copy(), imag_raw.copy()
+		self.g, self.s = real_raw.copy(), imag_raw.copy()
+		self.mask = np.ones(counts.shape, dtype=np.uint8)
+		self.counts_filtered = counts.copy()
+		self.min_count, self.max_count = 0, 10000
+		self.kernel_size, self.repetition = 3, 0
+		self.labels = np.ones(counts.shape, dtype=np.uint8)
 		self.labels_unique = np.array([1])
+		self.group = "default"
+		self.color = str2color(self.group)
 
-		# Misc attributes
-		self.group: str = "default"
-		self.color: str = str2color(self.group)
 
-	def calibrate_phasor(self, calibration:"Calibration") -> None:
+	def calibrate_phasor(self, calibration:Calibration) -> None:
 		self.real_calibrated, self.imag_calibrated = calibration.compute_calibrated_phasor(self.real_raw, self.imag_raw)
 		# Update last seen frequency if calibration is provided
 		if calibration and calibration.frequency > 0:
@@ -246,7 +240,7 @@ class Dataset:
 
 		return vals[np.isfinite(vals)]
 
-	def image_feature(self, feature:str, stat:str, harmonic:int=1) -> float:
+	def image_feature(self, feature:str, stat:str, harmonic:int=1) -> list:
 		"""
 		Compute image-level feature, collect all non-background labels.
 		Return length L list containing the feature stats, where L is the number of labels.

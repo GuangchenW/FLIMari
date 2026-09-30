@@ -10,13 +10,10 @@ from napari.utils.notifications import show_info, show_warning, show_error
 
 from qtpy.QtWidgets import (
 	QWidget,
-	QHBoxLayout,
 	QVBoxLayout,
 	QGridLayout,
 	QPushButton,
-	QLineEdit,
 	QComboBox,
-	QLabel,
 	QListWidget,
 	QListWidgetItem,
 	QFileDialog
