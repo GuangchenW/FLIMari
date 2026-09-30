@@ -1,0 +1,6 @@
+{
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportPrivateImportUsage": "none"
+    },
+    "python-envs.defaultEnvManager": "ms-python.python:system"
+}

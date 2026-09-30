@@ -162,7 +162,7 @@ class DatasetRow(QWidget):
 class SampleManagerWidget(QWidget):
 	def __init__(
 		self,
-		viewer: "napari.viewer.Viewer",
+		viewer: "napari.Viewer",
 		cal_widget: "CalibrationWidget",
 		parent: QWidget|None = None,
 	):
