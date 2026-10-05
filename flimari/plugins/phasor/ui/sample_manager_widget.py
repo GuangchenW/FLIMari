@@ -5,7 +5,7 @@ from typing import Dict, Optional, List, TYPE_CHECKING
 import numpy as np
 import tifffile as t3f
 from napari.utils import progress
-from napari.utils.notifications import show_warning
+from napari.utils.notifications import show_info, show_warning, show_error
 
 from qtpy.QtCore import Qt, Signal
 from qtpy.QtGui import QIcon
@@ -35,6 +35,7 @@ from .phasor_plot_widget import PhasorPlotWidget
 from .summary_widget import SummaryWidget
 from .umap_widget import UMAPWidget
 from ..core import Dataset, ExternalDataset, Workspace
+from ..core.workspace import FILE_FILTER
 
 if TYPE_CHECKING:
 	import xarray
@@ -123,6 +124,15 @@ class DatasetRow(QWidget):
 	def set_text(self, text:str) -> None:
 		self.label.setText(text)
 
+	def restore_state(self) -> None:
+		"""
+		Restore the row state of a dataset.
+		"""
+		# Calibration parameters are not saved, mark calibration state stale
+		self.indicator.set_state("warn")
+		# Re-add imported labels, the default is all ones
+		if np.any(self.dataset.labels != 1): self._show_labels()
+
 	## ------ Internal ------ ##
 	def _on_removal(self) -> None:
 		if not (self._list and self._item):
@@ -154,8 +164,11 @@ class DatasetRow(QWidget):
 		if len(labels.shape) > 2:
 			raise RuntimeError("Incorrect label format, must have only 1 channel")
 		self.dataset.set_labels(labels)
+		self._show_labels()
+
+	def _show_labels(self) -> None:
 		LayerManager().add_label(
-			labels,
+			self.dataset.labels,
 			name=str(self.dataset.id),
 			display_name = self.dataset.layer_name()+".roi",
 			overwrite=True
@@ -251,6 +264,15 @@ class SampleManagerWidget(QWidget):
 		self.btn_apply_filter = QPushButton("Apply filter")
 		self.btn_apply_filter.clicked.connect(self._on_btn_apply_filter_clicked)
 		dataset_control_layout.addWidget(self.btn_apply_filter, 4, 0, 1, 4)
+		# Workspace save/load
+		self.btn_save_workspace = QPushButton("Save workspace")
+		self.btn_save_workspace.setToolTip("Save all datasets and their processing states to a file")
+		self.btn_save_workspace.clicked.connect(self._on_save_workspace)
+		self.btn_load_workspace = QPushButton("Load workspace")
+		self.btn_load_workspace.setToolTip("Load a saved workspace (current datasets will be replaced)")
+		self.btn_load_workspace.clicked.connect(self._on_load_workspace)
+		dataset_control_layout.addWidget(self.btn_save_workspace, 5, 0, 1, 2)
+		dataset_control_layout.addWidget(self.btn_load_workspace, 5, 2, 1, 2)
 		# To make the special text work as intended,
 		# while making the instantiation easy to understand,
 		# we decrement the minimum of these spinbox by 1
@@ -451,6 +473,47 @@ class SampleManagerWidget(QWidget):
 	def _remove_dataset_layers(self, ds:Dataset) -> None:
 		for kind in (LayerType.IMAGE, LayerType.LABEL):
 			LayerManager().remove_layer(str(ds.id), kind)
+
+	def _clear_datasets(self) -> None:
+		"""
+		Remove all datasets, their rows and their layers.
+		"""
+		for ds in self.workspace.datasets.values():
+			self._remove_dataset_layers(ds)
+		self.dataset_list.clear() # Also deletes the row widgets
+		self.workspace.clear()
+
+	def _on_save_workspace(self) -> None:
+		if not self.workspace.datasets:
+			show_warning("No datasets to save")
+			return
+		path, _ = QFileDialog.getSaveFileName(self, "Save workspace", "", FILE_FILTER)
+		if not path: return
+		try:
+			self.workspace.save_to_disk(path)
+		except Exception as e:
+			show_error(f"Failed to save workspace:\n{e}")
+			return
+		show_info(f"Saved {len(self.workspace.datasets)} datasets to:\n{path}")
+
+	def _on_load_workspace(self) -> None:
+		"""
+		Replace the current datasets with a saved workspace.
+		"""
+		path, _ = QFileDialog.getOpenFileName(self, "Load workspace", "", FILE_FILTER)
+		if not path: return
+		# Load into a temporary workspace in case of failed load
+		loaded = Workspace()
+		try:
+			loaded.load_from_disk(path)
+		except Exception as e:
+			show_error(f"Failed to load workspace:\n{e}")
+			return
+		self._clear_datasets()
+		for ds in progress(list(loaded.datasets.values()), desc="Restoring datasets"):
+			row = self._add_dataset(ds)
+			if row: row.restore_state()
+		show_info(f"Loaded {len(loaded.datasets)} datasets")
 
 	def _mark_all_stale(self) -> None:
 		# DANGER: manually changing phi_0 and m_0 does not trigger this
