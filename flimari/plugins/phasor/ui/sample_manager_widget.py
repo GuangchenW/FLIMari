@@ -494,7 +494,7 @@ class SampleManagerWidget(QWidget):
 		except Exception as e:
 			show_error(f"Failed to save workspace:\n{e}")
 			return
-		show_info(f"Saved {len(self.workspace.datasets)} datasets to:\n{path}")
+		show_info(f"Saved {len(self.workspace.datasets)} datasets to: {path}")
 
 	def _on_load_workspace(self) -> None:
 		"""
@@ -507,7 +507,7 @@ class SampleManagerWidget(QWidget):
 		try:
 			loaded.load_from_disk(path)
 		except Exception as e:
-			show_error(f"Failed to load workspace:\n{e}")
+			show_error(f"Failed to load workspace!\n{e}")
 			return
 		self._clear_datasets()
 		for ds in progress(list(loaded.datasets.values()), desc="Restoring datasets"):
