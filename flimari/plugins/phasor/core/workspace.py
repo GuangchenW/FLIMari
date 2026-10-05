@@ -15,9 +15,6 @@ if TYPE_CHECKING:
 WORKSPACE_VERSION = 1
 FILE_FILTER = "FLIMari workspace (*.npz)"
 
-_DATASET_ARRAYS = ("counts", "mean", "real_raw", "imag_raw", 
-                   "real_calibrated", "imag_calibrated", "g", "s",
-				   "mask", "labels")
 _DATASET_TYPES = {cls.__name__: cls for cls in {Dataset, ExternalDataset}}
 
 class Workspace:
@@ -36,11 +33,19 @@ class Workspace:
 	def __init__(self):
 		self.datasets: dict[uuid.UUID, Dataset] = {}
 
+	def __contains__(self, ds_id: uuid.UUID) -> bool:
+		return ds_id in self.datasets
+
 	def register_dataset(self, ds: Dataset) -> None:
+		if ds.id in self.datasets:
+			raise ValueError(f"Dataset {ds.display_name()} is already registered")
 		self.datasets[ds.id] = ds
 
 	def remove_dataset(self, ds: Dataset) -> None:
 		self.datasets.pop(ds.id, None)
+
+	def clear(self) -> None:
+		self.datasets.clear()
 
 	def save_to_disk(
 		self,
@@ -54,6 +59,7 @@ class Workspace:
 		arrays: dict[str, np.ndarray] = {}
 		for ds in self.datasets.values():
 			d = ds.to_dict()
+			d["type"] = type(ds).__name__ # Native or external dataset
 			# Archive arrays and scalars separately
 			for k in [k for k,v in d.items() if isinstance(v, np.ndarray)]:
 				arrays[f"{ds.id}.{k}"] = d.pop(k)
@@ -74,7 +80,10 @@ class Workspace:
 			for d in header["datasets"]:
 				prefix = f"{d['id']}."
 				d.update({k[len(prefix):]: npz[k] for k in npz.files if k.startswith(prefix)})
-				ds = Dataset.from_dict(d)
+				type_name = d.pop("type", Dataset.__name__)
+				if type_name not in _DATASET_TYPES:
+					raise ValueError(f"Unknown dataset type {type_name}")
+				ds = _DATASET_TYPES[type_name].from_dict(d)
 				datasets[ds.id] = ds
 
 		self.datasets = datasets
