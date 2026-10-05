@@ -75,7 +75,7 @@ class DatasetRow(QWidget):
 		# Button for focus on layers related to dataset
 		self.btn_show = ThemedButton(icon="visibility", viewer=self.viewer)
 		self.btn_show.setToolTip("Focus in layer viewer")
-		self.btn_show.clicked.connect(lambda : LayerManager().focus_on_layers(self.dataset.name))
+		self.btn_show.clicked.connect(lambda : LayerManager().focus_on_layers(str(self.dataset.id)))
 		# Dropbox for selecting the lifetime to visualize
 		self.lifetime_combo_box = QComboBox()
 		self.lifetime_combo_box.setToolTip((
@@ -134,16 +134,17 @@ class DatasetRow(QWidget):
 	def _on_show(self) -> None:
 		# Show lifetime map
 		match self.lifetime_combo_box.currentText():
-			case "none":
-				LayerManager().add_image(self.dataset.counts_filtered, name=self.dataset.name, overwrite=True)
-			case "phi":
-				LayerManager().add_image(self.dataset.phase_lifetime, name=self.dataset.name, overwrite=True)
-			case "M":
-				LayerManager().add_image(self.dataset.modulation_lifetime, name=self.dataset.name, overwrite=True)
-			case "proj":
-				LayerManager().add_image(self.dataset.normal_lifetime, name=self.dataset.name, overwrite=True)
-			case "avg":
-				LayerManager().add_image(self.dataset.avg_lifetime, name=self.dataset.name, overwrite=True)
+			case "none": data = self.dataset.counts_filtered
+			case "phi": data = self.dataset.phase_lifetime
+			case "M": data = self.dataset.modulation_lifetime
+			case "proj": data = self.dataset.normal_lifetime
+			case "avg": data = self.dataset.avg_lifetime
+		LayerManager().add_image(
+			data,
+			name=str(self.dataset.id),
+			display_name=self.dataset.layer_name(),
+			overwrite=True
+		)
 
 	def _on_import_labels(self) -> None:
 		path, _ = QFileDialog.getOpenFileName(self, "Select label file", "", "TIFF files (*.tif *.tiff)")
@@ -153,8 +154,8 @@ class DatasetRow(QWidget):
 		self.dataset.set_labels(labels)
 		LayerManager().add_label(
 			labels,
-			name=self.dataset.name,
-			display_name = self.dataset.name+".roi",
+			name=str(self.dataset.id),
+			display_name = self.dataset.layer_name()+".roi",
 			overwrite=True
 		)
 
