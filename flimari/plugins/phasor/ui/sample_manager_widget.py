@@ -5,6 +5,7 @@ from typing import Dict, Optional, List, TYPE_CHECKING
 import numpy as np
 import tifffile as t3f
 from napari.utils import progress
+from napari.utils.notifications import show_warning
 
 from qtpy.QtCore import Qt, Signal
 from qtpy.QtGui import QIcon
@@ -26,14 +27,14 @@ from qtpy.QtWidgets import (
 	QStyle
 )
 
-from flimari.core import LayerManager
+from flimari.core import LayerManager, LayerType
 from flimari.core import load_signal
 from flimari.core.widgets import ThemedButton, Indicator
 import flimari.core.bridge as _bridge
 from .phasor_plot_widget import PhasorPlotWidget
 from .summary_widget import SummaryWidget
 from .umap_widget import UMAPWidget
-from ..core import Dataset, ExternalDataset
+from ..core import Dataset, ExternalDataset, Workspace
 
 if TYPE_CHECKING:
 	import xarray
@@ -44,6 +45,7 @@ if TYPE_CHECKING:
 
 class DatasetRow(QWidget):
 	show_clicked = Signal()
+	removed = Signal(object)
 
 	def __init__(
 		self,
@@ -128,8 +130,8 @@ class DatasetRow(QWidget):
 			return
 		r = self._list.row(self._item) # Get the row index
 		self._list.takeItem(r) # Remove from list
+		self.removed.emit(self.dataset)
 		self.deleteLater() # Delete the widget; let gc handle the list item
-		# TODO: Remove the associated layers?
 
 	def _on_show(self) -> None:
 		# Show lifetime map
@@ -177,6 +179,8 @@ class SampleManagerWidget(QWidget):
 		# Set up connect to update status od datasets
 		cal_widget.calibrationChanged.connect(self._mark_all_stale)
 		self.param_names: list[str] = ["min_count", "max_count", "kernel_size", "repetition"]
+		# Registry of all datasets in the list, keyed by dataset id
+		self.workspace = Workspace()
 
 		_bridge.register_import_callback(self._import_from_napari_phasors)
 		self._build()
@@ -310,16 +314,17 @@ class SampleManagerWidget(QWidget):
 			"FLIM files (*.tif *.tiff *.ptu);;All files (*)"
 		)
 		selected_channel = self.channel_selector.value()-1
+		skipped = []
 		for path in progress(paths, desc="Reading files"):
+			# Check for duplicates before file read
+			if Dataset.make_id(path, selected_channel) in self.workspace:
+				skipped.append(f"{Path(path).name} (C{selected_channel+1})")
+				continue
 			ds = Dataset(path=path, channel=selected_channel)
+			self._add_dataset(ds)
+		if skipped:
+			show_warning("Already loaded:\n" + "\n".join(skipped))
 
-			item = QListWidgetItem(self.dataset_list)
-			row = DatasetRow(ds, self.viewer)
-			row.bind(self.dataset_list, item) 
-			item.setSizeHint(row.sizeHint())
-			self.dataset_list.addItem(item)
-			self.dataset_list.setItemWidget(item, row)
-	
 	def _on_selection_changed(self) -> None:
 		"""
 		Only for determining the active state of compute and visualize buttons.
@@ -418,12 +423,34 @@ class SampleManagerWidget(QWidget):
 		"""
 		for data in progress(data_list, desc="Importing from napari-phasors"):
 			ds = ExternalDataset(data)
-			item = QListWidgetItem(self.dataset_list)
-			row = DatasetRow(ds, self.viewer)
-			row.bind(self.dataset_list, item)
-			item.setSizeHint(row.sizeHint())
-			self.dataset_list.addItem(item)
-			self.dataset_list.setItemWidget(item, row)
+			self._add_dataset(ds)
+
+	def _add_dataset(self, ds:Dataset) -> DatasetRow|None:
+		"""
+		Create a DatasetRow for `ds`, insert it into the list and register in the workspace.
+		Return None without adding if a dataset with the same id is already registered.
+		"""
+		if ds.id in self.workspace: return None
+		item = QListWidgetItem(self.dataset_list)
+		row = DatasetRow(ds, self.viewer)
+		row.bind(self.dataset_list, item)
+		row.removed.connect(self._on_dataset_removed)
+		item.setSizeHint(row.sizeHint())
+		self.dataset_list.addItem(item)
+		self.dataset_list.setItemWidget(item, row)
+		self.workspace.register_dataset(ds)
+		return row
+
+	def _on_dataset_removed(self, ds:Dataset) -> None:
+		"""
+		Unregister a removed dataset and remove its layers,
+		"""
+		self.workspace.remove_dataset(ds)
+		self._remove_dataset_layers(ds)
+
+	def _remove_dataset_layers(self, ds:Dataset) -> None:
+		for kind in (LayerType.IMAGE, LayerType.LABEL):
+			LayerManager().remove_layer(str(ds.id), kind)
 
 	def _mark_all_stale(self) -> None:
 		# DANGER: manually changing phi_0 and m_0 does not trigger this
