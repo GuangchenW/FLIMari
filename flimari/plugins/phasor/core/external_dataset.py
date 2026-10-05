@@ -45,6 +45,7 @@ class ExternalDataset(Dataset):
 		s_orig = _ensure_two_harmonics(s_orig)
 
 		self._init_state(
+			id=uuid.uuid4(), # No file identity, fallback to uuid4
 			name=data["name"], path=data["name"], channel=int(data.get("channel", 0)),
 			frequency=float(data.get("frequency", 80.0)),
 			counts=data.get("counts", None), # napari-phasors sends true per-pixel photon counts (mean × histogram bins)
@@ -76,10 +77,6 @@ class ExternalDataset(Dataset):
 
 		# --- Lifetime estimates --- #
 		self.compute_lifetime_estimates()
-
-	# Override display_name to make the origin visible in the UI.
-	def display_name(self) -> str:
-		return f"{self.name} [napari-phasors/{self.group}]"
 
 
 # --- helpers --- #

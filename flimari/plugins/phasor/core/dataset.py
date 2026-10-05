@@ -119,15 +119,25 @@ class Dataset:
 		counts = signal.sum(dim='H').to_numpy() # Sum of photon counts over H axis
 
 		self._init_state(
+			id=Dataset.make_id(path, channel),
 			name=path.name, path=path, channel=channel, frequency=frequency,
 			counts=counts, mean=mean, real_raw=real, imag_raw=imag
 		)
 
 		self.compute_lifetime_estimates()
 
-	def _init_state(self, *, name, path, channel, frequency, counts, mean, real_raw, imag_raw) -> None:
+	@staticmethod
+	def make_id(path:str|Path, channel:int) -> uuid.UUID:
+		"""
+		Return a deterministic id for a (file, channel) pair.
+		The same channel of the same file always maps to the same id.
+		"""
+		key = f"{os.path.normcase(Path(path).resolve())}|{channel}"
+		return uuid.uuid5(uuid.NAMESPACE_URL, key)
+
+	def _init_state(self, *, id, name, path, channel, frequency, counts, mean, real_raw, imag_raw) -> None:
 		"""Declare attributes and set it to its default state."""
-		self.id = uuid.uuid4() # Unique dataset id
+		self.id = id # Unique dataset id
 		self.name, self.path, self.channel = name, path, channel
 		self.frequency = frequency if frequency > 0 else 80 # Mhz
 		self.counts, self.mean = counts, mean
@@ -363,8 +373,13 @@ class Dataset:
 					raise KeyError(morph_feat)
 		return out
 
+	def layer_name(self) -> str:
+		"""Name of the napari layers shown in the UI."""
+		return f"{self.name} (C{self.channel+1})"
+	
 	def display_name(self) -> str:
-		return f"{self.name} (C{self.channel+1}) [{self.group}]"
+		"""Name shown in the sample manager UI."""
+		return f"{self.layer_name()} [{self.group}]"
 
 	## ------ Internal ------ ##
 	def _photon_range_mask(self) -> np.ndarray:
