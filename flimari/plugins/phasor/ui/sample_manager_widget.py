@@ -153,7 +153,7 @@ class DatasetRow(QWidget):
 			case "avg": data = self.dataset.avg_lifetime
 		LayerManager().add_image(
 			data,
-			name=str(self.dataset.id),
+			key=str(self.dataset.id),
 			display_name=self.dataset.layer_name(),
 			overwrite=True
 		)
@@ -169,7 +169,7 @@ class DatasetRow(QWidget):
 	def _show_labels(self) -> None:
 		LayerManager().add_label(
 			self.dataset.labels,
-			name=str(self.dataset.id),
+			key=str(self.dataset.id),
 			display_name = self.dataset.layer_name()+".roi",
 			overwrite=True
 		)
