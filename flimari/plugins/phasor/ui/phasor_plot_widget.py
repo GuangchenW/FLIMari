@@ -79,8 +79,8 @@ class PhasorPlotWidget(QWidget):
 			labels = labels_from_roi(*ds.get_phasor(), roi_list)
 			LayerManager().add_label(
 				labels,
-				name=ds.name,
-				display_name = ds.name+".roi",
+				key=str(ds.id),
+				display_name = ds.layer_name()+".roi",
 				cdict=color_dict,
 				overwrite=True
 			)

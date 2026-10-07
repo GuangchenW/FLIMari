@@ -1,20 +1,18 @@
-import os
 from pathlib import Path
-from typing import Dict, Optional, List, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING
 
 import numpy as np
 import tifffile as t3f
 from napari.utils import progress
+from napari.utils.notifications import show_info, show_warning, show_error
 
 from qtpy.QtCore import Qt, Signal
-from qtpy.QtGui import QIcon
 from qtpy.QtWidgets import (
 	QWidget,
 	QHBoxLayout,
 	QVBoxLayout,
 	QGridLayout,
 	QGroupBox,
-	QFormLayout,
 	QPushButton,
 	QLineEdit,
 	QComboBox,
@@ -23,7 +21,6 @@ from qtpy.QtWidgets import (
 	QSpinBox,
 	QListWidget,
 	QListWidgetItem,
-	QStyle
 )
 
 from flimari.core import LayerManager
@@ -33,17 +30,17 @@ import flimari.core.bridge as _bridge
 from .phasor_plot_widget import PhasorPlotWidget
 from .summary_widget import SummaryWidget
 from .umap_widget import UMAPWidget
-from ..core import Dataset, ExternalDataset
+from ..core import Dataset, ExternalDataset, Workspace
+from ..core.workspace import FILE_FILTER
 
 if TYPE_CHECKING:
-	import xarray
 	import napari
 	# HACK: still feels a bit hacky
 	from .calibration_widget import CalibrationWidget
 	from ..core import Calibration
 
 class DatasetRow(QWidget):
-	show_clicked = Signal()
+	removed = Signal(object)
 
 	def __init__(
 		self,
@@ -59,7 +56,7 @@ class DatasetRow(QWidget):
 		self._item: QListWidgetItem|None = None
 
 		self._build()
-		self._on_show()
+		self._update_image()
 
 	## ------ UI ------ ##
 	def _build(self) -> None:
@@ -72,10 +69,10 @@ class DatasetRow(QWidget):
 		self.btn_import_labels = ThemedButton(icon="new_labels", viewer=self.viewer)
 		self.btn_import_labels.setToolTip("Import labels")
 		self.btn_import_labels.clicked.connect(self._on_import_labels)
-		# Button for focus on layers related to dataset
-		self.btn_show = ThemedButton(icon="visibility", viewer=self.viewer)
-		self.btn_show.setToolTip("Focus in layer viewer")
-		self.btn_show.clicked.connect(lambda : LayerManager().focus_on_layers(self.dataset.name))
+		# Toggle for showing layers related to dataset in the viewer
+		self.btn_show = ThemedButton(icon="visibility_off", icon_checked="visibility", viewer=self.viewer)
+		self.btn_show.setToolTip("Show/hide layers in viewer")
+		self.btn_show.toggled.connect(self._on_toggle_show)
 		# Dropbox for selecting the lifetime to visualize
 		self.lifetime_combo_box = QComboBox()
 		self.lifetime_combo_box.setToolTip((
@@ -83,7 +80,7 @@ class DatasetRow(QWidget):
 			"'M': apparent modulation lifetime\nproj: projected lifetime\navg: average geometric-search lifetime"
 		))
 		self.lifetime_combo_box.addItems(["none", "phi", "M", "proj", "avg"])
-		self.lifetime_combo_box.currentIndexChanged.connect(lambda i : self._on_show())
+		self.lifetime_combo_box.currentIndexChanged.connect(lambda i : self._update_image())
 		# Indicator for calibration status
 		self.indicator = Indicator()
 		self.indicator.set_state("bad")
@@ -121,6 +118,15 @@ class DatasetRow(QWidget):
 	def set_text(self, text:str) -> None:
 		self.label.setText(text)
 
+	def restore_state(self) -> None:
+		"""
+		Restore the row state of a dataset.
+		"""
+		# Calibration parameters are not saved, mark calibration state stale
+		self.indicator.set_state("warn")
+		# Re-register imported labels, the default is all ones
+		if np.any(self.dataset.labels != 1): self._update_labels()
+
 	## ------ Internal ------ ##
 	def _on_removal(self) -> None:
 		if not (self._list and self._item):
@@ -128,33 +134,44 @@ class DatasetRow(QWidget):
 			return
 		r = self._list.row(self._item) # Get the row index
 		self._list.takeItem(r) # Remove from list
+		self.removed.emit(self.dataset)
 		self.deleteLater() # Delete the widget; let gc handle the list item
-		# TODO: Remove the associated layers?
 
-	def _on_show(self) -> None:
-		# Show lifetime map
+	def _on_toggle_show(self, checked:bool) -> None:
+		if checked:
+			LayerManager().show_layers(str(self.dataset.id))
+		else:
+			LayerManager().hide_layers(str(self.dataset.id))
+
+	def _update_image(self) -> None:
+		# Register lifetime map, shown in viewer only if toggled on
 		match self.lifetime_combo_box.currentText():
-			case "none":
-				LayerManager().add_image(self.dataset.counts_filtered, name=self.dataset.name, overwrite=True)
-			case "phi":
-				LayerManager().add_image(self.dataset.phase_lifetime, name=self.dataset.name, overwrite=True)
-			case "M":
-				LayerManager().add_image(self.dataset.modulation_lifetime, name=self.dataset.name, overwrite=True)
-			case "proj":
-				LayerManager().add_image(self.dataset.normal_lifetime, name=self.dataset.name, overwrite=True)
-			case "avg":
-				LayerManager().add_image(self.dataset.avg_lifetime, name=self.dataset.name, overwrite=True)
+			case "none": data = self.dataset.counts_filtered
+			case "phi": data = self.dataset.phase_lifetime
+			case "M": data = self.dataset.modulation_lifetime
+			case "proj": data = self.dataset.normal_lifetime
+			case "avg": data = self.dataset.avg_lifetime
+		LayerManager().add_image(
+			data,
+			key=str(self.dataset.id),
+			display_name=self.dataset.layer_name(),
+			overwrite=True
+		)
 
 	def _on_import_labels(self) -> None:
 		path, _ = QFileDialog.getOpenFileName(self, "Select label file", "", "TIFF files (*.tif *.tiff)")
+		if not path: return
 		labels = t3f.imread(path)
 		if len(labels.shape) > 2:
 			raise RuntimeError("Incorrect label format, must have only 1 channel")
 		self.dataset.set_labels(labels)
+		self._update_labels()
+
+	def _update_labels(self) -> None:
 		LayerManager().add_label(
-			labels,
-			name=self.dataset.name,
-			display_name = self.dataset.name+".roi",
+			self.dataset.labels,
+			key=str(self.dataset.id),
+			display_name = self.dataset.layer_name()+".roi",
 			overwrite=True
 		)
 
@@ -162,7 +179,7 @@ class DatasetRow(QWidget):
 class SampleManagerWidget(QWidget):
 	def __init__(
 		self,
-		viewer: "napari.viewer.Viewer",
+		viewer: "napari.Viewer",
 		cal_widget: "CalibrationWidget",
 		parent: QWidget|None = None,
 	):
@@ -176,6 +193,8 @@ class SampleManagerWidget(QWidget):
 		# Set up connect to update status od datasets
 		cal_widget.calibrationChanged.connect(self._mark_all_stale)
 		self.param_names: list[str] = ["min_count", "max_count", "kernel_size", "repetition"]
+		# Registry of all datasets in the list, keyed by dataset id
+		self.workspace = Workspace()
 
 		_bridge.register_import_callback(self._import_from_napari_phasors)
 		self._build()
@@ -246,6 +265,15 @@ class SampleManagerWidget(QWidget):
 		self.btn_apply_filter = QPushButton("Apply filter")
 		self.btn_apply_filter.clicked.connect(self._on_btn_apply_filter_clicked)
 		dataset_control_layout.addWidget(self.btn_apply_filter, 4, 0, 1, 4)
+		# Workspace save/load
+		self.btn_save_workspace = QPushButton("Save workspace")
+		self.btn_save_workspace.setToolTip("Save all datasets and their processing states to a file")
+		self.btn_save_workspace.clicked.connect(self._on_save_workspace)
+		self.btn_load_workspace = QPushButton("Load workspace")
+		self.btn_load_workspace.setToolTip("Load a saved workspace (current datasets will be replaced)")
+		self.btn_load_workspace.clicked.connect(self._on_load_workspace)
+		dataset_control_layout.addWidget(self.btn_save_workspace, 5, 0, 1, 2)
+		dataset_control_layout.addWidget(self.btn_load_workspace, 5, 2, 1, 2)
 		# To make the special text work as intended,
 		# while making the instantiation easy to understand,
 		# we decrement the minimum of these spinbox by 1
@@ -309,16 +337,17 @@ class SampleManagerWidget(QWidget):
 			"FLIM files (*.tif *.tiff *.ptu);;All files (*)"
 		)
 		selected_channel = self.channel_selector.value()-1
+		skipped = []
 		for path in progress(paths, desc="Reading files"):
+			# Check for duplicates before file read
+			if Dataset.make_id(path, selected_channel) in self.workspace:
+				skipped.append(f"{Path(path).name} (C{selected_channel+1})")
+				continue
 			ds = Dataset(path=path, channel=selected_channel)
+			self._add_dataset(ds)
+		if skipped:
+			show_warning("Already loaded:\n" + "\n".join(skipped))
 
-			item = QListWidgetItem(self.dataset_list)
-			row = DatasetRow(ds, self.viewer)
-			row.bind(self.dataset_list, item) 
-			item.setSizeHint(row.sizeHint())
-			self.dataset_list.addItem(item)
-			self.dataset_list.setItemWidget(item, row)
-	
 	def _on_selection_changed(self) -> None:
 		"""
 		Only for determining the active state of compute and visualize buttons.
@@ -368,7 +397,7 @@ class SampleManagerWidget(QWidget):
 				if param_vals[name] is not None:
 					setattr(ds, name, param_vals[name])
 			ds.apply_filters()
-			row._on_show()
+			row._update_image()
 
 	def _get_filter_param_values(self) -> dict[str,int]:
 		param_vals = {}
@@ -417,12 +446,74 @@ class SampleManagerWidget(QWidget):
 		"""
 		for data in progress(data_list, desc="Importing from napari-phasors"):
 			ds = ExternalDataset(data)
-			item = QListWidgetItem(self.dataset_list)
-			row = DatasetRow(ds, self.viewer)
-			row.bind(self.dataset_list, item)
-			item.setSizeHint(row.sizeHint())
-			self.dataset_list.addItem(item)
-			self.dataset_list.setItemWidget(item, row)
+			self._add_dataset(ds)
+
+	def _add_dataset(self, ds:Dataset) -> DatasetRow|None:
+		"""
+		Create a DatasetRow for `ds`, insert it into the list and register in the workspace.
+		Return None without adding if a dataset with the same id is already registered.
+		"""
+		if ds.id in self.workspace: return None
+		item = QListWidgetItem(self.dataset_list)
+		row = DatasetRow(ds, self.viewer)
+		row.bind(self.dataset_list, item)
+		row.removed.connect(self._on_dataset_removed)
+		item.setSizeHint(row.sizeHint())
+		self.dataset_list.addItem(item)
+		self.dataset_list.setItemWidget(item, row)
+		self.workspace.register_dataset(ds)
+		return row
+
+	def _on_dataset_removed(self, ds:Dataset) -> None:
+		"""
+		Unregister a removed dataset and remove its layers,
+		"""
+		self.workspace.remove_dataset(ds)
+		self._remove_dataset_layers(ds)
+
+	def _remove_dataset_layers(self, ds:Dataset) -> None:
+		LayerManager().forget(str(ds.id))
+
+	def _clear_datasets(self) -> None:
+		"""
+		Remove all datasets, their rows and their layers.
+		"""
+		for ds in self.workspace.datasets.values():
+			self._remove_dataset_layers(ds)
+		self.dataset_list.clear() # Also deletes the row widgets
+		self.workspace.clear()
+
+	def _on_save_workspace(self) -> None:
+		if not self.workspace.datasets:
+			show_warning("No datasets to save")
+			return
+		path, _ = QFileDialog.getSaveFileName(self, "Save workspace", "", FILE_FILTER)
+		if not path: return
+		try:
+			self.workspace.save_to_disk(path)
+		except Exception as e:
+			show_error(f"Failed to save workspace:\n{e}")
+			return
+		show_info(f"Saved {len(self.workspace.datasets)} datasets to: {path}")
+
+	def _on_load_workspace(self) -> None:
+		"""
+		Replace the current datasets with a saved workspace.
+		"""
+		path, _ = QFileDialog.getOpenFileName(self, "Load workspace", "", FILE_FILTER)
+		if not path: return
+		# Load into a temporary workspace in case of failed load
+		loaded = Workspace()
+		try:
+			loaded.load_from_disk(path)
+		except Exception as e:
+			show_error(f"Failed to load workspace!\n{e}")
+			return
+		self._clear_datasets()
+		for ds in progress(list(loaded.datasets.values()), desc="Restoring datasets"):
+			row = self._add_dataset(ds)
+			if row: row.restore_state()
+		show_info(f"Loaded {len(loaded.datasets)} datasets")
 
 	def _mark_all_stale(self) -> None:
 		# DANGER: manually changing phi_0 and m_0 does not trigger this
