@@ -30,23 +30,23 @@ class LayerManager:
 		if viewer:
 			self.viewer = viewer
 			# TODO: Wire events
-		# Stores a nested dictionary containing the ndarray for layer
+		# Stores a nested dictionary containing the spec to build each layer:
+		#	{"data": ndarray, "display_name": str, "kwargs": dict}
 		# Keyed by:
 		#	name: associated file name
 		#	kind: the kind of layer this is
 		self.layer_data = {}
+		# Names whose layers should be present in the viewer
+		self._shown: set[str] = set()
 
 	## ------ Public API ------ ##
 	def add_layer(
-		self, 
-		data:np.ndarray, *, 
-		name:str,
-		kind:LayerType,
-		display_name:str = "",
-		overwrite:bool = False,
-		**kwargs) -> None:
+		self, data:np.ndarray, *, 
+		name:str, kind:LayerType, display_name:str = "", 
+		overwrite:bool = False, **kwargs) -> None:
 		"""
-		Add a new napari layer or overwrite an existing one.
+		Register layer data, or overwrite an existing one.
+		The napari layer is only added/updated if `name` is shown (see `show_layers`).
 
 		Args:
 			data: The data to display.
@@ -56,21 +56,23 @@ class LayerManager:
 			overwrite: Whether to overwrite if a layer with the same `LayerType` and `name` already exists.
 			**kwargs: Optional arguments for the add layer call to napari.
 		"""
+		# Drop unset kwargs (e.g. colormap=None) so they don't interfere with stored ones
+		kwargs = {k: v for k, v in kwargs.items() if v is not None}
+		spec = self._get_spec(name, kind)
 		# If no data registered yet, register in dict.
 		# Or, if data registered and overwrite, replace data.
-		if self.get_layer_data(name, kind) is None or overwrite:
-			self.layer_data.setdefault(name, {})[kind] = data
-		# Get the target layer
-		layer = self._find_layer(name, kind)
-		if layer is None:
-			# If no layer exists, add as new layer
-			self._add_layer(data, name=name, kind=kind, display_name=display_name, **kwargs)
+		if spec is None:
+			self.layer_data.setdefault(name, {})[kind] = {
+				"data": data,
+				"display_name": display_name,
+				"kwargs": kwargs
+			}
 		elif overwrite:
-			layer.data = data
-			# If it is label layer, we need to update colormap as well
-			if kind == LayerType.LABEL:
-				cmap = kwargs.pop("colormap", None)
-				if cmap: layer.colormap = cmap
+			spec["data"] = data
+			spec["display_name"] = display_name or spec["display_name"]
+			spec["kwargs"].update(kwargs)
+		# Added to viewer if layer is not hidden
+		if name in self._shown: self._sync_layer(name, kind, overwrite)
 
 	def add_image(self, data:np.ndarray, *, name:str, overwrite:bool=False, **kwargs) -> None:
 		"""
@@ -109,9 +111,35 @@ class LayerManager:
 		Returns:
 			Data stored in the layer. If no data is stored, return `None`.
 		"""
-		# TODO: We don't need this I think, just use napari api to find layer then get data
-		l1 = self.layer_data.get(name)
-		return None if l1 is None else l1.get(kind)
+		spec = self._get_spec(name, kind)
+		return None if spec is None else spec["data"]
+
+	def show_layers(self, name:str) -> None:
+		"""
+		Add all stored layers related to `name` to the viewer.
+		"""
+		self._shown.add(name)
+		# Add image first so labels sit on top
+		for kind in (LayerType.IMAGE, LayerType.LABEL):
+			self._sync_layer(name, kind)
+
+	def hide_layers(self, name:str) -> None:
+		"""
+		Remove all layers related to `name` from the viewer, keeping their data stored.
+		"""
+		self._shown.discard(name)
+		for kind in LayerType:
+			self.remove_layer(name, kind)
+
+	def is_shown(self, name:str) -> bool:
+		return name in self._shown
+
+	def forget(self, name:str) -> None:
+		"""
+		Remove all layers related to `name` from the viewer and drop their stored data.
+		"""
+		self.hide_layers(name)
+		self.layer_data.pop(name, None)
 
 	def focus_on_layers(self, name:str) -> None:
 		"""
@@ -119,7 +147,7 @@ class LayerManager:
 		"""
 		for lyr in self.viewer.layers:
 			meta = getattr(lyr, "metadata", {})
-			fs = meta.get("flimstudio")
+			fs = meta.get("flimari")
 			lyr.visible = (fs is not None and fs.get("name") == name)
 
 	def remove_layer(self, name:str, kind:LayerType) -> None:
@@ -137,12 +165,42 @@ class LayerManager:
 			self.viewer.layers.remove(layer)
 
 	## ------ Internal ------ ##
+	def _get_spec(self, name:str, kind:LayerType) -> dict|None:
+		l1 = self.layer_data.get(name)
+		return None if l1 is None else l1.get(kind)
+
+	def _sync_layer(self, name:str, kind:LayerType, overwrite:bool=False) -> None:
+		"""
+		Sync the viewer layer with the stored spec. Add if missing, update if `overwrite`.
+		"""
+		spec = self._get_spec(name, kind)
+		if spec is None: return
+		layer = self._find_layer(name, kind)
+		if layer is None:
+			# Make metadata
+			tag = self._make_tag(name, kind)
+			# If display name is empty, default to name
+			display_name = spec["display_name"] or name
+			# Add layer
+			match kind:
+				case LayerType.IMAGE:
+					self.viewer.add_image(spec["data"], name=display_name, metadata=tag, **spec["kwargs"])
+				case LayerType.LABEL:
+					self.viewer.add_labels(spec["data"], name=display_name, metadata=tag, **spec["kwargs"])
+		elif overwrite:
+			# If layer exists, replace its data
+			layer.data = spec["data"]
+			# If it is label layer, update colormap as well
+			if kind == LayerType.LABEL:
+				cmap = spec["kwargs"].get("colormap")
+				if cmap: layer.colormap = cmap
+
 	def _make_tag(self, name:str, kind:LayerType) -> dict:
 		return {
-			"flimstudio": {
+			"flimari": {
 				"name": name,
 				"kind": kind,
-				"version": 1
+				"version": 2
 			}
 		}
 
@@ -152,22 +210,7 @@ class LayerManager:
 		"""
 		for lyr in self.viewer.layers:
 			meta = getattr(lyr, "metadata", {})
-			fs = meta.get("flimstudio")
+			fs = meta.get("flimari")
 			if fs and fs.get("name") == name and fs.get("kind") == kind:
 				return lyr
 		return None
-
-	def _add_layer(self, data:np.ndarray, *, name:str, kind:LayerType, display_name:str, **kwargs) -> None:
-		"""
-		Helper function for add_layer. Performs the actual layer adding.
-		"""
-		# Make metadata
-		tag = self._make_tag(name, kind)
-		# If display name is empty, default to name
-		display_name = display_name or name
-		# Add layer
-		match kind:
-			case LayerType.IMAGE:
-				self.viewer.add_image(data, name=display_name, metadata=tag, **kwargs)
-			case LayerType.LABEL:
-				self.viewer.add_labels(data, name=display_name, metadata=tag, **kwargs)
