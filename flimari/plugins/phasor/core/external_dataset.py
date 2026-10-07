@@ -48,7 +48,7 @@ class ExternalDataset(Dataset):
 			id=uuid.uuid4(), # No file identity, fallback to uuid4
 			name=data["name"], path=data["name"], channel=int(data.get("channel", 0)),
 			frequency=float(data.get("frequency", 80.0)),
-			counts=data.get("counts", None), # napari-phasors sends true per-pixel photon counts (mean × histogram bins)
+			counts=data.get("counts", None), # napari-phasors sends true per-pixel photon counts (mean x histogram bins)
 			mean= np.asarray(data.get("mean", np.ones(g.shape[1:], dtype=float)), dtype=float),
 			real_raw=g_orig, imag_raw=s_orig
 		)
@@ -66,10 +66,10 @@ class ExternalDataset(Dataset):
 
 		# --- Filter parameters --- #
 		# Record what napari-phasors already applied so the UI reflects it.
-		self.min_count: int  = int(data.get("min_count", 0))
-		self.max_count = data.get("max_count", 10000)
+		self.min_count: int = int(data.get("min_count", 0))
+		self.max_count: int = int(data.get("max_count", 10000))
 		self.kernel_size: int = int(data.get("filter_size", 3))
-		self.repetition: int  = int(data.get("filter_repeat", 0))
+		self.repetition: int = int(data.get("filter_repeat", 0))
 
 		# Filtered counts: zero out masked pixels
 		self.counts_filtered: np.ndarray = self.counts.copy()
