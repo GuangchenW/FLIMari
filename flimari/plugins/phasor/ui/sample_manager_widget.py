@@ -40,7 +40,6 @@ if TYPE_CHECKING:
 	from ..core import Calibration
 
 class DatasetRow(QWidget):
-	show_clicked = Signal()
 	removed = Signal(object)
 
 	def __init__(
