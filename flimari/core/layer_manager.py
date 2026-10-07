@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 from enum import Enum
 import numpy as np
 
@@ -19,25 +19,24 @@ class LayerManager:
 
 	def __new__(cls, *arg, **kwarg):
 		if cls._instance is None:
-			cls._instance = super().__new__(cls)
+			inst = super().__new__(cls)
+			# State must be initialized here, since __init__ runs on every LayerManager() call.
+			# Stores a nested dictionary containing the spec to build each layer:
+			#	{"data": ndarray, "display_name": str, "kwargs": dict}
+			# Keyed by:
+			#	key: unique key of the data
+			#	kind: the kind of layer this is
+			inst.layer_data = {}
+			# Keys whose layers should be present in the viewer
+			inst._shown: set[str] = set()
+			cls._instance = inst
 		return cls._instance
 
 	def __init__(self, viewer:Optional["napari.Viewer"]=None):
-		# HACK: A little hacky. We need to ensure that the first 
-		# call to the constructor supplies the viewer.
-		# Fortunately, it is clear the LayerManager will always be created in shell.
-		# Since every module will be using it.
-		if viewer:
-			self.viewer = viewer
-			# TODO: Wire events
-		# Stores a nested dictionary containing the spec to build each layer:
-		#	{"data": ndarray, "display_name": str, "kwargs": dict}
-		# Keyed by:
-		#	key: unique key of the data
-		#	kind: the kind of layer this is
-		self.layer_data = {}
-		# Keys whose layers should be present in the viewer
-		self._shown: set[str] = set()
+		# HACK: A little hacky. We need to ensure that the first call to the constructor 
+		# supplies the viewer. Fortunately, we can create the LayerManager in the app shell.
+		# Since we know every module will be using it.
+		if viewer: self.viewer = viewer
 
 	## ------ Public API ------ ##
 	def add_layer(
@@ -140,15 +139,6 @@ class LayerManager:
 		"""
 		self.hide_layers(key)
 		self.layer_data.pop(key, None)
-
-	def focus_on_layers(self, key:str) -> None:
-		"""
-		Make all layers related to `key` visible and hide others.
-		"""
-		for lyr in self.viewer.layers:
-			meta = getattr(lyr, "metadata", {})
-			fs = meta.get("flimari")
-			lyr.visible = (fs is not None and fs.get("key") == key)
 
 	def remove_layer(self, key:str, kind:LayerType) -> None:
 		"""
