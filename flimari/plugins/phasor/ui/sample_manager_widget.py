@@ -1,6 +1,5 @@
-import os
 from pathlib import Path
-from typing import Dict, Optional, List, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING
 
 import numpy as np
 import tifffile as t3f
@@ -8,14 +7,12 @@ from napari.utils import progress
 from napari.utils.notifications import show_info, show_warning, show_error
 
 from qtpy.QtCore import Qt, Signal
-from qtpy.QtGui import QIcon
 from qtpy.QtWidgets import (
 	QWidget,
 	QHBoxLayout,
 	QVBoxLayout,
 	QGridLayout,
 	QGroupBox,
-	QFormLayout,
 	QPushButton,
 	QLineEdit,
 	QComboBox,
@@ -24,10 +21,9 @@ from qtpy.QtWidgets import (
 	QSpinBox,
 	QListWidget,
 	QListWidgetItem,
-	QStyle
 )
 
-from flimari.core import LayerManager, LayerType
+from flimari.core import LayerManager
 from flimari.core import load_signal
 from flimari.core.widgets import ThemedButton, Indicator
 import flimari.core.bridge as _bridge
@@ -38,7 +34,6 @@ from ..core import Dataset, ExternalDataset, Workspace
 from ..core.workspace import FILE_FILTER
 
 if TYPE_CHECKING:
-	import xarray
 	import napari
 	# HACK: still feels a bit hacky
 	from .calibration_widget import CalibrationWidget
@@ -62,7 +57,7 @@ class DatasetRow(QWidget):
 		self._item: QListWidgetItem|None = None
 
 		self._build()
-		self._on_show()
+		self._update_image()
 
 	## ------ UI ------ ##
 	def _build(self) -> None:
@@ -75,10 +70,10 @@ class DatasetRow(QWidget):
 		self.btn_import_labels = ThemedButton(icon="new_labels", viewer=self.viewer)
 		self.btn_import_labels.setToolTip("Import labels")
 		self.btn_import_labels.clicked.connect(self._on_import_labels)
-		# Button for focus on layers related to dataset
-		self.btn_show = ThemedButton(icon="visibility", viewer=self.viewer)
-		self.btn_show.setToolTip("Focus in layer viewer")
-		self.btn_show.clicked.connect(lambda : LayerManager().focus_on_layers(str(self.dataset.id)))
+		# Toggle for showing layers related to dataset in the viewer
+		self.btn_show = ThemedButton(icon="visibility_off", icon_checked="visibility", viewer=self.viewer)
+		self.btn_show.setToolTip("Show/hide layers in viewer")
+		self.btn_show.toggled.connect(self._on_toggle_show)
 		# Dropbox for selecting the lifetime to visualize
 		self.lifetime_combo_box = QComboBox()
 		self.lifetime_combo_box.setToolTip((
@@ -86,7 +81,7 @@ class DatasetRow(QWidget):
 			"'M': apparent modulation lifetime\nproj: projected lifetime\navg: average geometric-search lifetime"
 		))
 		self.lifetime_combo_box.addItems(["none", "phi", "M", "proj", "avg"])
-		self.lifetime_combo_box.currentIndexChanged.connect(lambda i : self._on_show())
+		self.lifetime_combo_box.currentIndexChanged.connect(lambda i : self._update_image())
 		# Indicator for calibration status
 		self.indicator = Indicator()
 		self.indicator.set_state("bad")
@@ -130,8 +125,8 @@ class DatasetRow(QWidget):
 		"""
 		# Calibration parameters are not saved, mark calibration state stale
 		self.indicator.set_state("warn")
-		# Re-add imported labels, the default is all ones
-		if np.any(self.dataset.labels != 1): self._show_labels()
+		# Re-register imported labels, the default is all ones
+		if np.any(self.dataset.labels != 1): self._update_labels()
 
 	## ------ Internal ------ ##
 	def _on_removal(self) -> None:
@@ -143,8 +138,14 @@ class DatasetRow(QWidget):
 		self.removed.emit(self.dataset)
 		self.deleteLater() # Delete the widget; let gc handle the list item
 
-	def _on_show(self) -> None:
-		# Show lifetime map
+	def _on_toggle_show(self, checked:bool) -> None:
+		if checked:
+			LayerManager().show_layers(str(self.dataset.id))
+		else:
+			LayerManager().hide_layers(str(self.dataset.id))
+
+	def _update_image(self) -> None:
+		# Register lifetime map, shown in viewer only if toggled on
 		match self.lifetime_combo_box.currentText():
 			case "none": data = self.dataset.counts_filtered
 			case "phi": data = self.dataset.phase_lifetime
@@ -160,13 +161,14 @@ class DatasetRow(QWidget):
 
 	def _on_import_labels(self) -> None:
 		path, _ = QFileDialog.getOpenFileName(self, "Select label file", "", "TIFF files (*.tif *.tiff)")
+		if not path: return
 		labels = t3f.imread(path)
 		if len(labels.shape) > 2:
 			raise RuntimeError("Incorrect label format, must have only 1 channel")
 		self.dataset.set_labels(labels)
-		self._show_labels()
+		self._update_labels()
 
-	def _show_labels(self) -> None:
+	def _update_labels(self) -> None:
 		LayerManager().add_label(
 			self.dataset.labels,
 			key=str(self.dataset.id),
@@ -396,7 +398,7 @@ class SampleManagerWidget(QWidget):
 				if param_vals[name] is not None:
 					setattr(ds, name, param_vals[name])
 			ds.apply_filters()
-			row._on_show()
+			row._update_image()
 
 	def _get_filter_param_values(self) -> dict[str,int]:
 		param_vals = {}
@@ -471,8 +473,7 @@ class SampleManagerWidget(QWidget):
 		self._remove_dataset_layers(ds)
 
 	def _remove_dataset_layers(self, ds:Dataset) -> None:
-		for kind in (LayerType.IMAGE, LayerType.LABEL):
-			LayerManager().remove_layer(str(ds.id), kind)
+		LayerManager().forget(str(ds.id))
 
 	def _clear_datasets(self) -> None:
 		"""
